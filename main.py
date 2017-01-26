@@ -3,8 +3,9 @@ import fileio
 import sys
 
 def main():
-    ip = input('IP of Host: ')
-    # ip = '10.0.255.44'
+    # ip = input('IP of Host: ')
+    ip = '10.1.120.1
+    '
     output = cdp.get_neighbor_details(ip, 'cisco_ios')
     
     if not output: sys.exit()
