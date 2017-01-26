@@ -2,9 +2,25 @@ from netmiko import ConnectHandler
 from netmiko import NetMikoAuthenticationException
 from netmiko import NetMikoTimeoutException
 
-from credentials import credList
-
-
+def getCreds():
+    '''
+    Get stored credentials. 
+    Optional myOrg: string argument matching one of the saved organizations.
+    Returns a tuple with username and password.
+    '''
+    
+    try:
+        from credentials import credList
+    
+    except ImportError:
+        import getpass
+        username = input("Username: ")
+        password = getpass.getpass("Password: ")
+        return [(username, password)]  
+        
+    else:
+        return credList
+        
 
 def start_cli_session(ip, platform):
     """
@@ -23,6 +39,8 @@ def start_cli_session(ip, platform):
     """
     
     print('# Connecting to %s device %s' % (platform, ip))
+    
+    credList = getCreds()
     
     # Try logging in with each credential we have
     for username, password in credList:
