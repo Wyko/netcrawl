@@ -21,9 +21,13 @@ class interface():
         self.remote_interface = remote_interface # An interface object representing the interface this one is connected to
         self.tunnel_status = tunnel_status # Online, Offline, or a custom status
         self.tunnel_destination_ip = tunnel_destination_ip # The globally routable IP address used to reach the far tunnel
-        
+    
+    
     def __str__(self):
-        pass
+            
+        output = []
+        for var, value in vars(self).items(): output.append(var + ': ' + str(value))
+        return '\n'.join(str(x) for x in sorted(output))
 
 
 class network_device():
@@ -32,14 +36,17 @@ class network_device():
                 device_name = '',
                 management_ip = '',
                 interfaces = [],
-                neighbors = []
+                neighbors = [],
+                config = '',
+                mac = ''
                 ):
         
         self.device_name = device_name
         self.management_ip = management_ip
+        self.mac = mac
         self.interfaces = interfaces # A list of interface objects
         self.neighbors = neighbors # A list of neighbor entries, as in CDP or LLDP
+        self.config = config # The full configuration of the device
                 
     def __str__(self):
-        return self.device_name
-
+        return self.device_name + ':' + self.management_ip
