@@ -1,6 +1,6 @@
-# network-scraper
+# netcrawl
 
-This package is designed to facilitate crawling a network for information.
+This package is designed to facilitate crawling a network for information on connected devices.
 
 It contains the following features:
 
