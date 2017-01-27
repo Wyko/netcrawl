@@ -84,5 +84,5 @@ def start_cli_session(ip, platform):
                 # If the device is unavailable, don't try any other credentials
                 break
     
-    raise IOError('# No connection could be established to %s.' % ip)
+    raise IOError('! No connection could be established to %s.' % ip)
 

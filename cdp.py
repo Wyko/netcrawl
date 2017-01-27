@@ -8,15 +8,14 @@ def get_cdp_neighbors(ssh_connection):
         raise IOError('No CDP output retrieved' % ssh_connection.ip)
         return
     
-    # Print the raw CDP output
-    for entry in cdp_output: print(entry)
-    
     # Parse out the CDP data and return a list of entries
     cdp_neighbor_list = []
     for entry in cdp_output:
         cdp_neighbor = parse_neighbor(entry)    
         if not is_empty(cdp_neighbor): cdp_neighbor_list.append(cdp_neighbor)
     return cdp_neighbor_list
+
+
 
 def get_raw_cdp_output(ssh_connection):
     """
@@ -34,9 +33,6 @@ def get_raw_cdp_output(ssh_connection):
     # execute the show cdp neighbor detail command
     # we increase the delay_factor for this command, because it take some time if many devices are seen by CDP
     result += ssh_connection.send_command("show cdp neighbor detail", delay_factor=2)
- 
-    # close SSH connection
-    ssh_connection.disconnect()
  
     return re.split(r'-{4,}', result)
 

@@ -1,5 +1,4 @@
-import cdp
-import sys
+from cdp import get_cdp_neighbors
 from cli import start_cli_session
 
 def main():
@@ -13,9 +12,13 @@ def main():
     except IOError as e:
         print(e)
         return
+    else:
+        print ('# Connection established to %s' % ssh_connection.ip)
     
-    print ('# Connection established to %s' % ssh_connection.ip)
+    # Get the CDP neighbors of the device
+    for n in get_cdp_neighbors(ssh_connection): print(n)
     
+    ssh_connection.disconnect()
     
     
 
