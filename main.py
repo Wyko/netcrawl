@@ -1,23 +1,23 @@
 import cdp
-import fileio
 import sys
+from cli import start_cli_session
 
 def main():
     # ip = input('IP of Host: ')
-    ip = '10.1.120.1
-    '
-    output = cdp.get_neighbor_details(ip, 'cisco_ios')
+    ip = '10.1.120.1'
     
-    if not output: sys.exit()
+    # Open a connection to the device and return a session object
+    # that we can reuse in multiple functions
+    try:
+        ssh_connection = start_cli_session(ip, 'cisco_ios')
+    except IOError as e:
+        print(e)
+        return
     
-    for entry in output: print(entry)
+    print ('# Connection established to %s' % ssh_connection.ip)
     
-    for entry in output:
-        cdp_neighbor = cdp.parse_neighbor(entry)    
-        if not cdp.is_empty(cdp_neighbor):
-            print(cdp_neighbor)
     
-    pass
+    
 
 if __name__ == "__main__":
     main()

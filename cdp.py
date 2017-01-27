@@ -1,31 +1,29 @@
-from netmiko import ConnectHandler
-from netmiko import NetMikoAuthenticationException
-from netmiko import NetMikoTimeoutException
-import sys
-import multiprocessing
-import re
-import time
-import cli
 import re
 
+def get_cdp_neighbors(ssh_connection):
+    # Get the layer two neighbors for the device 
+    cdp_output = get_raw_cdp_output(ssh_connection)
+    if not cdp_output: 
+        print ('# No CDP output retrieved from %s' % ssh_connection.ip)
+        raise IOError('No CDP output retrieved' % ssh_connection.ip)
+        return
+    
+    # Print the raw CDP output
+    for entry in cdp_output: print(entry)
+    
+    # Parse out the CDP data and return a list of entries
+    cdp_neighbor_list = []
+    for entry in cdp_output:
+        cdp_neighbor = parse_neighbor(entry)    
+        if not is_empty(cdp_neighbor): cdp_neighbor_list.append(cdp_neighbor)
+    return cdp_neighbor_list
 
-
-def get_neighbor_details(ip, platform):
+def get_raw_cdp_output(ssh_connection):
     """
     get the CDP neighbor detail from the given device using SSH
- 
-    :param ip: IP address of the device
-    :param username: username used for the authentication
-    :param password: password used for the authentication
-    :param enable_secret: enable secret
+     
     :return:
     """
-    
-    try:
-        ssh_connection = cli.start_cli_session(ip, platform)
-    except IOError as e:
-        print(e)
-        return
  
     # enter enable mode
     ssh_connection.enable()
