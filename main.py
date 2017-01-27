@@ -4,7 +4,7 @@ from cli import start_cli_session
 
 def main():
     # ip = input('IP of Host: ')
-    ip = '10.0.255.44'
+    ip = '10.1.120.1'
     
     # Open a connection to the device and return a session object
     # that we can reuse in multiple functions
