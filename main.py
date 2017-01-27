@@ -1,5 +1,6 @@
 from cdp import get_cdp_neighbors
 from cli import start_cli_session
+from cisco import get_config
 
 def main():
     # ip = input('IP of Host: ')
@@ -12,11 +13,12 @@ def main():
     except IOError as e:
         print(e)
         return
-    else:
-        print ('# Connection established to %s' % ssh_connection.ip)
     
     # Get the CDP neighbors of the device
-    for n in get_cdp_neighbors(ssh_connection): print(n)
+    #for n in get_cdp_neighbors(ssh_connection): print(n)
+    
+    # Get the config
+    print(get_config(ssh_connection))
     
     ssh_connection.disconnect()
     

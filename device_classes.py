@@ -8,7 +8,7 @@ class interface():
                  interface_status='', 
                  tunnel_destination_ip='', 
                  remote_interface='', 
-                 tunnel_status=''
+                 tunnel_status='',
                  interface_type=''
                  ):
                      
@@ -16,7 +16,7 @@ class interface():
         self.interface_ip = interface_ip # Interface IP address
         self.interface_subnet = interface_subnet # Interface interface_subnet mask 
         self.interface_description = interface_description # Interface interface_description
-        self.interface_status = status # 
+        self.interface_status = interface_status # 
         self.interface_type = interface_type # I.E: GigabitEthernet, Tunnel, Loopback
         self.remote_interface = remote_interface # An interface object representing the interface this one is connected to
         self.tunnel_status = tunnel_status # Online, Offline, or a custom status
@@ -32,7 +32,8 @@ class network_device():
                 device_name = '',
                 management_ip = '',
                 interfaces = [],
-                neighbors = [],
+                neighbors = []
+                ):
         
         self.device_name = device_name
         self.management_ip = management_ip
@@ -40,5 +41,5 @@ class network_device():
         self.neighbors = neighbors # A list of neighbor entries, as in CDP or LLDP
                 
     def __str__(self):
-        return device_name
+        return self.device_name
 

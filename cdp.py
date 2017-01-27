@@ -11,7 +11,8 @@ def get_cdp_neighbors(ssh_connection):
     # Parse out the CDP data and return a list of entries
     cdp_neighbor_list = []
     for entry in cdp_output:
-        cdp_neighbor = parse_neighbor(entry)    
+        cdp_neighbor = parse_neighbor(entry)
+    
         if not is_empty(cdp_neighbor): cdp_neighbor_list.append(cdp_neighbor)
     return cdp_neighbor_list
 
@@ -34,6 +35,8 @@ def get_raw_cdp_output(ssh_connection):
     # we increase the delay_factor for this command, because it take some time if many devices are seen by CDP
     result += ssh_connection.send_command("show cdp neighbor detail", delay_factor=2)
  
+    # Split the raw output by the common '---' separator and return a list of 
+    # CDP entries
     return re.split(r'-{4,}', result)
 
 def parse_system_name(cdp_input):
