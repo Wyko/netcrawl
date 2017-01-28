@@ -28,25 +28,35 @@ class interface():
         output = []
         for var, value in vars(self).items(): output.append(var + ': ' + str(value))
         return '\n'.join(str(x) for x in sorted(output))
+    
 
 
 class network_device():
     '''Generic network device'''
     def __init__(self,
                 device_name = '',
-                management_ip = '',
                 interfaces = [],
                 neighbors = [],
                 config = '',
-                mac = ''
+                management_ip = '',
+                serial_numbers = []
                 ):
         
         self.device_name = device_name
-        self.management_ip = management_ip
-        self.mac = mac
         self.interfaces = interfaces # A list of interface objects
         self.neighbors = neighbors # A list of neighbor entries, as in CDP or LLDP
         self.config = config # The full configuration of the device
+        self.management_ip = management_ip
+        self.serial_numbers = serial_numbers
+                
                 
     def __str__(self):
-        return self.device_name + ':' + self.management_ip
+        return '\n'.join([
+            'Device Name: ' + self.device_name,
+            'Management IP: ' + self.management_ip,
+            'First Serial: ' + str(self.serial_numbers[0]),
+            'Serial Count: ' + str(len(self.serial_numbers)),
+            'Interface Count: ' + str(len(self.interfaces)),
+            'Neighbor Count: ' + str(len(self.neighbors)),
+            'Config Size: ' + str(len(self.config))
+            ])
