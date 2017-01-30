@@ -1,10 +1,5 @@
-# Attempt to use the accelerated C implementation.
-# Included for backwards compatibility.
-try: import xml.etree.cElementTree as ET
-except ImportError: import xml.etree.ElementTree as ET
-
+from lxml import etree as ET
 from device_classes import network_device
-
 import os.path
 
 
@@ -44,6 +39,12 @@ def print_tree(tree):
     for elem in tree.iter():
         print (elem.tag, elem.attrib)
 
+
+
+def entry_exists(device, tree):
+    for elem in tree.find('network_device[serials/serial'):
+            break
+    pass
         
 
 def write_device(device, destination='main.xml', update=True, error_code=''):
@@ -78,5 +79,23 @@ def write_device(device, destination='main.xml', update=True, error_code=''):
     # If a single device was passed, convert it to a single element list.
     if type(device) is network_device: device = [device]
 
+    device_element = ''
+    # Check to see if the device already exists, if we need to update it
+    if update and device.serial[0]['serial'] and device.serial[0]['serial'] != '':
 
+        # Compare the device's serial against the database
+        elem = root.xpath("network_device[serials/serial/@serial='XYZ1234567890']")
+
+        # If a result was found (result list not empty)
+        if elem:
+            device_element = elem[0]
+        else:
+            # Otherwise create a new element and add it to the database
+            device_element = ET.Element("network_device")
+            root.append(device_element)
+            
+
+
+
+    
     

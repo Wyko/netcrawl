@@ -77,11 +77,11 @@ def start_cli_session(ip, platform):
 					password=password,
 					secret=password
 				)
-				print('# Successful ssh auth to %s' % (ip))
+				print('# Successful ssh auth to %s using %s, %s' % (ip, username, password[:2]))
 				return ssh_connection
 	
 			except NetMikoAuthenticationException:
-				print ('# SSH auth error to %s using %s / %s' % (ip, username, password))
+				print ('# SSH auth error to %s using %s, %s' % (ip, username, password[:2]))
 				continue
 			except NetMikoTimeoutException:
 				print('# SSH to %s timed out.' % ip)
@@ -100,11 +100,11 @@ def start_cli_session(ip, platform):
                     password=password,
                     secret=password
                 )
-                print('# Successful telnet auth to %s' % (ip))
+                print('# Successful telnet auth to %s using %s, %s' % (ip, username, password[:2]))
                 return ssh_connection
             
 			except NetMikoAuthenticationException:
-                print ('# Telnet auth error to %s using %s / %s' % (ip, username, password))
+                print ('# Telnet auth error to %s using %s, %s' % (ip, username, password[:2]))
                 continue
             except:
                 print('# Telnet to %s timed out.' % ip)
