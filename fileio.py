@@ -3,6 +3,8 @@
 try: import xml.etree.cElementTree as ET
 except ImportError: import xml.etree.ElementTree as ET
 
+from device_classes import network_device
+
 import os.path
 
 
@@ -31,7 +33,7 @@ def open_tree(destination='main.xml', create=True):
         tree = ET.ElementTree(file=destination)
     else:
         tree = ET.ElementTree()
-
+    
     if tree: return tree
     else: return False
 
@@ -48,7 +50,8 @@ def write_device(device, destination='main.xml', update=True, error_code=''):
     """Write a network_device to an XML database.
     
     Args:
-        device (network_device): The network_device class object to write.
+        device (network_device): The network_device class object to write. Can
+            accept both a single device or a list of devices.
         update (Boolean): If True, search for and update an existing copy
             of the device in the database. If none is found, create a new
             entry anyway.
@@ -72,4 +75,8 @@ def write_device(device, destination='main.xml', update=True, error_code=''):
 
     root = tree.getroot()
 
-        
+    # If a single device was passed, convert it to a single element list.
+    if type(device) is network_device: device = [device]
+
+
+    
