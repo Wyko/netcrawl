@@ -90,7 +90,6 @@ def start_cli_session(ip, platform):
     
 	# Check to see if port 23 (telnet) is open
 	if port_is_open(ip, 23)
-    # (Old Code) if (not 'ssh_connection' in locals()) and (platform=='cisco_ios'):
         for username, password in credList:
             try:
                 # Establish a connection to the device using telnet
