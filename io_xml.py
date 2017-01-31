@@ -3,7 +3,7 @@ from device_classes import network_device
 import os.path
 
 
-def open_tree(destination='main.xml', create=True):
+def open_tree(destination='main', create=True):
     """Opens an XML file and returns a tree object. If the database does not
     exist, create a databse with that name and return the tree object
     associated with it.
@@ -17,7 +17,9 @@ def open_tree(destination='main.xml', create=True):
         ElementTree: The tree object corresponding with the opened database
         Boolean: False if no tree was opened or created.
     """
-
+	
+	destination = destination + '.xml'
+	
     # Break early if the file doesn't exist and we aren't allowed to make
     # a new one.
     exists = os.path.isfile(destination)
@@ -47,7 +49,7 @@ def entry_exists(device, tree):
     pass
         
 
-def write_device(device, destination='main.xml', update=True, error_code=''):
+def write_device(device, destination='main', update=True, error_code=''):
     """Write a network_device to an XML database.
     
     Args:
@@ -69,7 +71,7 @@ def write_device(device, destination='main.xml', update=True, error_code=''):
     """
 
     # Open the database
-    tree = open_tree(destination)
+    tree = open_tree(destination + '.xml')
     if not tree or tree == False:
         raise IOError('!!! File ' + destination + ' could not be opened for writing device.')
         return False
