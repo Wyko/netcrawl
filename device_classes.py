@@ -1,3 +1,5 @@
+import re 
+
 class interface():
     '''Generic network device interface'''
     def __init__(self, 
@@ -22,6 +24,8 @@ class interface():
         self.tunnel_status = tunnel_status # Online, Offline, or a custom status
         self.tunnel_destination_ip = tunnel_destination_ip # The globally routable IP address used to reach the far tunnel
     
+    
+
     
     def __str__(self):
             
@@ -49,6 +53,26 @@ class network_device():
         self.management_ip = management_ip
         self.serial_numbers = serial_numbers
                 
+    
+    def interfaces_to_string(self):
+        output = ''
+        output = '\n----------\n'.join(str(interf) for interf in self.interfaces)           
+        return output
+            
+    
+    def get_ips(self):
+        """Returns a list of IP addresses aggregated from interfaces."""
+        
+        output = []
+        for interf in self.interfaces:
+            
+            # if the interface exists and if it matches an IP address
+            if (interf.interface_ip and 
+                re.search(r"(1[0-9]{1,3}(?:\.\d{1,3}){3})", interf.interface_ip, flags=re.I)):
+                output.append(interf.interface_ip) 
+        
+        return output
+        
                 
     def __str__(self):
         return '\n'.join([

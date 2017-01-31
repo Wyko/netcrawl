@@ -1,25 +1,27 @@
-from lxml import etree as ET
 from device_classes import network_device
 import os.path
+import global_vars
 
 
-def open_tree(destination='main', create=True):
+def open_tree(destination, create=True):
     """Opens an XML file and returns a tree object. If the database does not
     exist, create a databse with that name and return the tree object
     associated with it.
     
     Args:
         destination (string): The database name to open (or create).
-        create (Boolean): (Optional) If True, allows the creation of a new file
-            if the database doesn't exist yet.
+        
+    Optional Args:
+        create (Boolean): If True, allows the creation of a new file if the 
+            database doesn't exist yet.
 
     Returns:
         ElementTree: The tree object corresponding with the opened database
         Boolean: False if no tree was opened or created.
     """
-	
-	destination = destination + '.xml'
-	
+    
+    destination = DB_PATH + destination + '.xml'
+    
     # Break early if the file doesn't exist and we aren't allowed to make
     # a new one.
     exists = os.path.isfile(destination)
@@ -49,8 +51,12 @@ def entry_exists(device, tree):
     pass
         
 
-def write_device(device, destination='main', update=True, error_code=''):
-    """Write a network_device to an XML database.
+
+    
+
+
+def write_device(device, destination, update=True, error_code=''):
+    """Write a network_device.
     
     Args:
         device (network_device): The network_device class object to write. Can
@@ -59,8 +65,7 @@ def write_device(device, destination='main', update=True, error_code=''):
             of the device in the database. If none is found, create a new
             entry anyway.
             If False, create a new entry.
-        destination (string): The database name to write to. Defaults to the
-            'main' database.
+        destination (string): The database name to write to. 
         error_code (string): An optional error field to include.
 
     Returns:

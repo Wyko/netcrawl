@@ -4,6 +4,7 @@ from device_classes import interface
 from device_classes import network_device
 from cdp import get_cdp_neighbors
 from cli import start_cli_session
+from io_file import log
 
 
 def parse_hostname(raw_config, ssh_connection=''):
@@ -41,13 +42,14 @@ def parse_nxos_interfaces(raw_config=''):
         
         try: i.interface_name = re.search(r'^interface[ ]?(.+)$', interf, re.IGNORECASE | re.MULTILINE).group(1)
         except: continue
+        else: i.interface_type = re.split(r'\d', i.interface_name)[0]
         
         # Description
         try: i.interface_description = re.search(r'description[ ]+(.+)$', interf, re.IGNORECASE | re.MULTILINE).group(1)
         except: pass
         
         # IP and Subnet (Might duplicate effort for IP, but whatever)
-        ip_info = re.search(r'ip address.*?(\d{1,3}(?:\.\d{1,3}){3})[ ]+(\d{1,3}(?:\.\d{1,3}){3})', interf, re.IGNORECASE | re.MULTILINE)
+        ip_info = re.search(r'ip address.*?(\d{1,3}(?:\.\d{1,3}){3})(?:(\/\d+)|[ ]+(\d{1,3}(?:\.\d{1,3}){3}))', interf, re.IGNORECASE | re.MULTILINE)
         try: i.interface_ip = ip_info.group(1)
         except: pass
         try: i.interface_subnet = ip_info.group(2)
@@ -154,12 +156,12 @@ def get_serials(ssh_connection):
 def get_device(ip, platform='cisco_ios'):
     '''Main method which returns a fully populated network_device object'''
     
-        # Open a connection to the device and return a session object
+   
+    # Open a connection to the device and return a session object
     # that we can reuse in multiple functions
     try: ssh_connection = start_cli_session(ip, platform)
-    except IOError as e:
-        print(e)
-        raise
+    except Exception as e:
+        log(str(e), ip)
         return
     
     device = network_device()
