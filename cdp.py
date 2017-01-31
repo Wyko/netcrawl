@@ -19,11 +19,7 @@ def get_cdp_neighbors(ssh_connection):
 
 
 def get_raw_cdp_output(ssh_connection):
-    """
-    get the CDP neighbor detail from the given device using SSH
-     
-    :return:
-    """
+    """Get the CDP neighbor detail from the given device using SSH"""
  
     # enter enable mode
     ssh_connection.enable()
