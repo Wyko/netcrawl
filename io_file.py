@@ -64,6 +64,8 @@ def update_index(index):
 def load_index():
     """Returns the index."""
     
+    log('# load_index: Loading index')
+    
     if not os.path.exists(DB_PATH):
         os.makedirs(DB_PATH)
 
@@ -125,7 +127,6 @@ def log_failed_device(msg='', device_ip='', error=''):
         return True
     
     else: return False    
-
 
 
 

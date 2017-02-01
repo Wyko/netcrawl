@@ -1,22 +1,14 @@
 from datetime import datetime
 from cisco import get_device
 
-from io_file import log, log_failed_device
-from io_file import write_device
-from io_file import load_index
-from io_file import update_index
-
+from io_file import log, log_failed_device, write_device, load_index, update_index
 from time import sleep
-from os.path import isfile
 from global_vars import TIME_FORMAT 
-
-import global_vars
-import os
 
 
 
 # This array store the devices we haven't visited yet
-pending_devices = [('10.1.199.26', 'cisco_ios')]
+pending_devices = [('10.1.120.1', 'cisco_ios')]
 
 # This is the index of devices we have visited
 index = ''
@@ -38,7 +30,6 @@ def load_pending_devices():
         except Exception as e:
             log_failed_device('! load_pending_devices: Failed to get device %s due to error: %s' % (ip, str(e)), ip, e)
             pending_devices.pop(i)
-            raise
             continue
         
         # Remove the offending device
@@ -56,7 +47,7 @@ def load_pending_devices():
         # Populate the pending devices with unknown devices
         for neighbor in device.neighbors:           
             if not is_platform_allowed(neighbor['netmiko_platform']): 
-                log('# Neighbor %s:%s rejected due to platform.' % (neighbor['ip'], neighbor['system_platform'])) 
+                log('# load_pending_devices: Neighbor %s:%s rejected due to platform.' % (neighbor['ip'], neighbor['system_platform'])) 
                 continue
             
             if not in_index([neighbor['ip']]):

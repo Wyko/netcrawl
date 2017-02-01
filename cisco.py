@@ -179,8 +179,8 @@ def get_device(ip, platform='cisco_ios', global_delay_factor=1):
     # that we can reuse in multiple functions
     try: ssh_connection = start_cli_session(ip, platform, global_delay_factor)
     except Exception as e:
-        log_failed_device('# get_device: Failed getting %s device %s' % (ip, platform), ip, str(e))
-        return
+        log('# get_device: Failed getting %s device %s' % (ip, platform), ip)
+        raise
     
     device = network_device()
     
