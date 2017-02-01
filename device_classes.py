@@ -72,11 +72,44 @@ class network_device():
                 output.append(interf.interface_ip) 
         
         return output
+    
+    
+    def unique_name(self):
+        """Returns a unique identifier for this device"""
         
+        output = []
+        trim_char = 5
+        
+        if self.management_ip and self.management_ip != '':
+            output.append(self.management_ip)
+        else: trim_char = 10
+        
+        if self.device_name and self.device_name != '':
+            if len(self.device_name) > trim_char:
+                output.append(self.device_name[(-1 * trim_char):])
+            else:
+                output.append(self.device_name)
+        
+        
+        if len(self.serial_numbers) == 0:
+            pass
+        elif len(self.serial_numbers[0]['serial']) > trim_char:
+            output.append(self.serial_numbers[0]['serial'][(-1 * trim_char):])
+        elif len(self.serial_numbers[0]['serial']) > 1:
+            output.append(self.serial_numbers[0]['serial'])
+        
+        return '_'.join(output)
+        
+    
+    def first_serial(self):
+        if len(self.serial_numbers) == 0: return ''
+        else: return self.serial_numbers[0]['serial']
+    
                 
     def __str__(self):
         return '\n'.join([
             'Device Name: ' + self.device_name,
+            'Unique Name: ' + self.unique_name(),
             'Management IP: ' + self.management_ip,
             'First Serial: ' + str(self.serial_numbers[0]),
             'Serial Count: ' + str(len(self.serial_numbers)),

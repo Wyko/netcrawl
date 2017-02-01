@@ -1,11 +1,13 @@
 import re
+from io_file import log
 
 def get_cdp_neighbors(ssh_connection):
     # Get the layer two neighbors for the device 
-    cdp_output = get_raw_cdp_output(ssh_connection)
+    try: cdp_output = get_raw_cdp_output(ssh_connection)
+    except:
+        log('# No CDP output retrieved from %s' % ssh_connection.ip)
+        
     if not cdp_output: 
-        print ('# No CDP output retrieved from %s' % ssh_connection.ip)
-        raise IOError('No CDP output retrieved' % ssh_connection.ip)
         return
     
     # Parse out the CDP data and return a list of entries

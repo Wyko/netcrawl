@@ -145,9 +145,19 @@ def get_serials(ssh_connection):
     # Get each serial number
     output = re.findall(r'^Name.*?["](.+?)["][\s\S]*?Desc.*?["](.+?)["][\s\S]*?SN:[ ]?(\w+)', raw_output, re.MULTILINE | re.IGNORECASE)
     
+    if len(output[0]) != 3:
+        log('!!! Output of %s is not normal. Len: %s, Output: %s' % 
+            (ssh_connection.ip, len(output[0]), output[0]), ssh_connection.ip)
+        return ''
+    
     serials = []
     
-    for i in output: serials.append(str(i))
+    for i in output:
+        serials.append({
+            'name': i[0],
+            'description': i[1],
+            'serial': i[2]
+            })
     
     return serials
     

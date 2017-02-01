@@ -72,7 +72,7 @@ def write_device(device, destination, update=True, error_code=''):
         Boolean: True if the write was successful, False if not.
 
     Raises:
-        IOError: If write was unsuccessful.
+        OSError: If write was unsuccessful.
     """
 
     # Open the database
