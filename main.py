@@ -1,7 +1,7 @@
 from datetime import datetime
 from cisco import get_device
 
-from io_file import log
+from io_file import log, log_failed_device
 from io_file import write_device
 from io_file import load_index
 from io_file import update_index
@@ -16,7 +16,7 @@ import os
 
 
 # This array store the devices we haven't visited yet
-pending_devices = [('10.1.120.1', 'cisco_ios')]
+pending_devices = [('10.1.199.26', 'cisco_ios')]
 
 # This is the index of devices we have visited
 index = ''
@@ -35,9 +35,10 @@ def load_pending_devices():
         
         try: 
             device = get_device(ip, platform)
-        except:
-            log('!!! Error retrieving %s' % ip)
+        except Exception as e:
+            log_failed_device('! load_pending_devices: Failed to get device %s due to error: %s' % (ip, str(e)), ip, e)
             pending_devices.pop(i)
+            raise
             continue
         
         # Remove the offending device
@@ -49,8 +50,7 @@ def load_pending_devices():
         log('# load_pending_devices: Found %s' % device.device_name)
         
         write_device(device)
-        
-        
+        add_to_index(device)
 
         
         # Populate the pending devices with unknown devices
@@ -117,12 +117,15 @@ def add_to_index(device):
         
         # If it's not in the index, add it
         if not in_index([ip]):
-            x = '[,]'.join([ 
-                ip,
-                device.first_serial(),
-                datetime.now().strftime(TIME_FORMAT)
-                ])
-            index.append()
+            entry = {
+                'ip': ip,
+                'serial': device.first_serial(),
+                'updated': datetime.now().strftime(TIME_FORMAT)
+                } 
+            index.append(entry)
+        
+        else: 
+            log('? %s already in index.' % ip)
             
     
     
@@ -136,6 +139,8 @@ if __name__ == "__main__":
     while True:
         load_pending_devices()
         update_index(index)
+        
+        if not pending_devices: break
         sleep(1)   
     
     

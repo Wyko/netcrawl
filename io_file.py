@@ -50,7 +50,13 @@ def update_index(index):
     
     with open(index_path, 'w') as outfile:
         for entry in index:
-            outfile.write(entry + '\n')
+            outfile.write('\n' + 
+                '[,]'.join([
+                    str(entry['ip']),
+                    str(entry['serial']),
+                    str(entry['updated'])
+                    ])
+                )
     
     log('# Writing index to file.')
 
@@ -68,8 +74,10 @@ def load_index():
         # Open the error log
         with open(index_path, 'r') as infile:
             for line in infile:
+                
                 # Split each index entry into a nice little dict object.
                 line = line.rstrip('\n')
+                if line == '': continue
                 line = line.split('[,]')
                 entry = {
                     'ip': line[0],
@@ -82,7 +90,46 @@ def load_index():
 
 
 
-def log(msg, device_ip='', device_serial=''):
+def log_failed_device(msg='', device_ip='', error=''):
+    """Logs a failed device.
+    
+    Args:
+        device_ip (string): The IP address of the device.
+        
+    Optional Args:
+        msg (string): The message to write.
+        
+    Returns:
+        Boolean: True if write was successful, False otherwise.
+    """ 
+
+    log(msg, device_ip)
+    
+    output = '[,]'.join([msg, 
+                         datetime.now().strftime(TIME_FORMAT),
+                         device_ip,
+                         str(error)
+                         ])
+    
+    
+    
+    if not os.path.exists(DB_PATH):
+        os.makedirs(DB_PATH)
+    
+    # Open the error log
+    f = open(DB_PATH + 'failed.txt','a')
+    
+    if f and not f.closed:
+        f.write(output + '\n')
+        f.close()
+        return True
+    
+    else: return False    
+
+
+
+
+def log(msg, device_ip='', print_out=True):
     """Writes a message to the log.
     
     Args:
@@ -90,19 +137,17 @@ def log(msg, device_ip='', device_serial=''):
         
     Optional Args:
         device_ip (string): The IP address of the device.
-        device_serial (string): The unique serial of the device.
         
     Returns:
         Boolean: True if write was successful, False otherwise.
     """ 
     
-    output = '[,]'.join([datetime.now().strftime(TIME_FORMAT),
-                         msg, 
-                         device_ip, 
-                         device_serial
+    output = '[,]'.join([msg, 
+                         datetime.now().strftime(TIME_FORMAT),
+                         device_ip
                          ])
     
-    print(msg)
+    if print_out: print(msg)
     
     if not os.path.exists(DB_PATH):
         os.makedirs(DB_PATH)
