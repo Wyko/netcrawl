@@ -1,2 +1,3 @@
 *.pyc
 country.xml
+*database*

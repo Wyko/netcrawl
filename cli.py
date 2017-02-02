@@ -76,7 +76,9 @@ def start_cli_session(ip, platform, global_delay_factor = 1):
     credList = getCreds()
     
     # Check to see if SSH (port 22) is open
-    if port_is_open(22, ip):
+    if not port_is_open(22, ip):
+        log('# start_cli_session: Port 22 is closed on %s' % ip, ip)
+    else: 
         # Try logging in with each credential we have
         for username, password in credList:
             try:
@@ -99,10 +101,12 @@ def start_cli_session(ip, platform, global_delay_factor = 1):
                 log('# start_cli_session: SSH to %s timed out.' % ip)
                 # If the device is unavailable, don't try any other credentials
                 break
-    else: log('# start_cli_session: Port 22 is closed on %s' % ip, ip)
+    
     
     # Check to see if port 23 (telnet) is open
-    if port_is_open(23, ip):
+    if not port_is_open(23, ip):
+        log('# start_cli_session: Port 23 is closed on %s' % ip, ip)
+    else:
         for username, password in credList:
             try:
                 # Establish a connection to the device using telnet

@@ -1,72 +1,77 @@
 from datetime import datetime
 from cisco import get_device
 
-from io_file import log, log_failed_device
-from io_file import write_device
-from io_file import load_index
-from io_file import update_index
-
+from io_file import log, log_failed_device, write_device
+from io_file import load_index, update_index, update_pending_devices 
 from time import sleep
-from os.path import isfile
 from global_vars import TIME_FORMAT 
-
-import global_vars
-import os
 
 
 
 # This array store the devices we haven't visited yet
-pending_devices = [('10.1.199.26', 'cisco_ios')]
+pending_devices = [('10.1.120.1', 'cisco_ios')]
 
 # This is the index of devices we have visited
 index = ''
- 
+
+# This is the list of failed devices
+failed_devices = []
     
 
-def load_pending_devices():
+def process_pending_devices():
     
     # The list containing found devices
     new_devices = []
     
     # Process each device in the pending list
     for i, (ip, platform) in enumerate(pending_devices):
-        print('# ------------')
-        log('# load_pending_devices: Processing %s' % ip)
+        log('# -------------------------------------------')
+        log('# process_pending_devices: Processing %s' % ip)
         
-        try: 
-            device = get_device(ip, platform)
+        try: device = get_device(ip, platform)
         except Exception as e:
-            log_failed_device('! load_pending_devices: Failed to get device %s due to error: %s' % (ip, str(e)), ip, e)
+            failed_devices.append(ip)
+            log_failed_device('! process_pending_devices: Failed to get %s' % (ip), ip, e)
             pending_devices.pop(i)
-            raise
             continue
         
         # Remove the offending device
         if not device: 
-            log('# load_pending_devices: No device found: %s' % ip)
+            log('! process_pending_devices: No device found with ip %s' % ip)
             pending_devices.pop(i)
             continue
         
-        log('# load_pending_devices: Found %s' % device.device_name)
+        log('# process_pending_devices: Found %s' % device.device_name)
         
+        # Save the device to disk and add all known IP's to the index
         write_device(device)
         add_to_index(device)
-
         
-        # Populate the pending devices with unknown devices
+        # Populate the pending devices list with all of the newly 
+        # found, previously unknown devices
         for neighbor in device.neighbors:           
+            
+            # Throw out all of the devices whose platform is not recognized  
             if not is_platform_allowed(neighbor['netmiko_platform']): 
-                log('# Neighbor %s:%s rejected due to platform.' % (neighbor['ip'], neighbor['system_platform'])) 
+                log('? process_pending_devices: Neighbor %s:%s rejected due to platform.' % (neighbor['ip'], neighbor['system_platform'])) 
                 continue
             
-            if not in_index([neighbor['ip']]):
+            # Check if the device a known device.
+            # If not, add it to the list of devices to check
+            if (not in_index([neighbor['ip']]) and 
+                not in_failed_list(neighbor['ip']) and
+                not (neighbor['ip'], neighbor['netmiko_platform']) in new_devices
+                ):
                 new_devices.append((neighbor['ip'], neighbor['netmiko_platform']))
         
         # Remove the processed device from the list
         pending_devices.pop(i)
+        
+        # Save the pending devices list to disk
+        update_pending_devices(pending_devices) 
     
     pending_devices.extend(new_devices)
-    log('# load_pending_devices: Loop completed. %s new IP\'s found' % str(len(new_devices)))
+    log('# process_pending_devices: Loop completed. %s new IP\'s found' % str(len(new_devices)))
             
 
 
@@ -106,9 +111,17 @@ def in_index(ip_list):
     return False
 
 
+def in_failed_list(ip):
+    if ip in failed_devices: 
+        log('# in_failed_list: {} previously failed.'.format(ip))
+        return True
+    else: 
+        return False 
     
 
 def add_to_index(device):
+    log('# add_to_index: Starting on device {}'.format(device.device_name))
+    
     # Get the interface IP's from the device 
     ip_list = device.get_ips()
     
@@ -119,11 +132,12 @@ def add_to_index(device):
         if not in_index([ip]):
             entry = {
                 'ip': ip,
-                'serial': device.first_serial(),
+                'name': device.device_name,
                 'updated': datetime.now().strftime(TIME_FORMAT)
                 } 
             index.append(entry)
-        
+            log('# add_to_index: Adding {}'.format(entry), print_out=False)
+            
         else: 
             log('? %s already in index.' % ip)
             
@@ -137,7 +151,7 @@ if __name__ == "__main__":
     index = load_index()
     
     while True:
-        load_pending_devices()
+        process_pending_devices()
         update_index(index)
         
         if not pending_devices: break
