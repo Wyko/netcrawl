@@ -2,7 +2,4 @@
 
 This package is designed to facilitate crawling a network for information on connected devices.
 
-It contains the following features:
-
-    Scan a network based on a seed device
-    
+This package is still in development and no part is ready for production use.
