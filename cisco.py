@@ -12,7 +12,7 @@ def parse_hostname(raw_config, ssh_connection=''):
     
     output = re.search('^hostname (.+)\n', raw_config, re.MULTILINE)
     if output: 
-        log('# parse_hostname: Regex found {}'.format(output.group(1)))
+        log('# parse_hostname: Regex parsing the config found {}'.format(output.group(1)))
         return output.group(1)
     
     if ssh_connection == '': 
@@ -30,7 +30,7 @@ def parse_hostname(raw_config, ssh_connection=''):
             continue
                     
         if '#' in output: 
-            log('# parse_hostname: Config parsing found ' + output)
+            log('# parse_hostname: Prompt parsing found ' + output)
             return output.split('#')[0]
         else: sleep(1)
     

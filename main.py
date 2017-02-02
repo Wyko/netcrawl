@@ -9,7 +9,7 @@ from global_vars import TIME_FORMAT
 
 
 # This array store the devices we haven't visited yet
-pending_devices = [('10.1.120.1', 'cisco_ios')]
+pending_devices = [('10.1.120.1', 'cisco_ios', '')]
 
 # This is the index of devices we have visited
 index = ''
@@ -24,20 +24,20 @@ def process_pending_devices():
     new_devices = []
     
     # Process each device in the pending list
-    for i, (ip, platform) in enumerate(pending_devices):
+    for i, (ip, platform, name) in enumerate(pending_devices):
         log('# -------------------------------------------')
-        log('# process_pending_devices: Processing %s' % ip)
+        log('# process_pending_devices: Processing connection to {1} at {0}'.format(ip, name))
         
         try: device = get_device(ip, platform)
         except Exception as e:
             failed_devices.append(ip)
-            log_failed_device('! process_pending_devices: Failed to get %s' % (ip), ip, e)
+            log_failed_device('! process_pending_devices: Failed connection to {1} at {0}'.format(ip, name), ip, e, cdp_name=name)
             pending_devices.pop(i)
             continue
         
         # Remove the offending device
         if not device: 
-            log('! process_pending_devices: No device found with ip %s' % ip)
+            log_failed_device('! process_pending_devices: Connected but returned nothing: {1} at {0}'.format(ip, name), ip, cdp_name=name)
             pending_devices.pop(i)
             continue
         
@@ -60,9 +60,9 @@ def process_pending_devices():
             # If not, add it to the list of devices to check
             if (not in_index([neighbor['ip']]) and 
                 not in_failed_list(neighbor['ip']) and
-                not (neighbor['ip'], neighbor['netmiko_platform']) in new_devices
+                not in_pending(neighbor['ip'])
                 ):
-                new_devices.append((neighbor['ip'], neighbor['netmiko_platform']))
+                new_devices.append((neighbor['ip'], neighbor['netmiko_platform'], neighbor['name']))
         
         # Remove the processed device from the list
         pending_devices.pop(i)
@@ -86,6 +86,16 @@ def is_platform_allowed(platform):
         return True
     else:
         return False
+
+
+def in_pending(ip):
+    for (pending_ip, platform, name) in pending_devices:
+        if ip == pending_ip: 
+            log('# in_pending: {} already pending.'.format(ip))
+            return True
+        
+    return False
+    
 
 
 def in_index(ip_list):

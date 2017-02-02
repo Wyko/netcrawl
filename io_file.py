@@ -106,8 +106,8 @@ def update_pending_devices(device_list):
     
     # Open the pending devices list, overwriting anything in it.
     with open(pending_path, 'w') as outfile:
-        for (ip, platform) in device_list:
-            outfile.write('\n{:15}, {}'.format(ip,platform))
+        for (ip, platform, name) in device_list:
+            outfile.write('\n{:15}, {:15}, {}'.format(ip, platform, name))
     
     log('# update_pending_devices: Writing devices to file.')
 
@@ -115,7 +115,7 @@ def update_pending_devices(device_list):
 
 
 
-def log_failed_device(msg='', device_ip='', error=''):
+def log_failed_device(msg='', device_ip='', error='', cdp_name=''):
     """Logs a failed device.
     
     Args:
@@ -130,9 +130,10 @@ def log_failed_device(msg='', device_ip='', error=''):
 
     log(msg, device_ip)
        
-    output = '{:19}, {:15}, {}, {}'.format(
+    output = '{:19}, {:15}, {:20.19}, {}, {}'.format(
             datetime.now().strftime(TIME_FORMAT),
             device_ip,
+            cdp_name,
             msg.replace(',', ';'),
             str(error).replace(',', ';')
             )

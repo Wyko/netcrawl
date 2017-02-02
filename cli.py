@@ -95,7 +95,7 @@ def start_cli_session(ip, platform, global_delay_factor = 1):
                 return ssh_connection
     
             except NetMikoAuthenticationException:
-                log ('# start_cli_session: SSH auth error to %s using %s, %s' % (ip, username, password[:2]))
+                log ('? start_cli_session: SSH auth error to %s using %s, %s' % (ip, username, password[:2]))
                 continue
             except NetMikoTimeoutException:
                 log('# start_cli_session: SSH to %s timed out.' % ip)
@@ -121,7 +121,7 @@ def start_cli_session(ip, platform, global_delay_factor = 1):
                 return ssh_connection
             
             except NetMikoAuthenticationException:
-                log('# start_cli_session: Telnet auth error to %s using %s, %s' % (ip, username, password[:2]))
+                log('? start_cli_session: Telnet auth error to %s using %s, %s' % (ip, username, password[:2]))
                 continue
             except:
                 log('# start_cli_session: Telnet to %s timed out.' % ip)
