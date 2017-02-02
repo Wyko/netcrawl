@@ -1,15 +1,17 @@
 from datetime import datetime
 from os.path import isfile
-from global_vars import TIME_FORMAT
-from global_vars import DB_PATH
+from global_vars import TIME_FORMAT, DB_PATH
+
 
 import os
 import pickle
 
 index_path = DB_PATH + 'index.db'
+pending_path = DB_PATH + 'pending.db'
+device_path = DB_PATH + 'dev/'
 
 
-def write_device(device, path=(DB_PATH + 'dev/'), update=True, error_code=''):
+def write_device(device, path=device_path, update=True, error_code=''):
     """Write a network_device using pickle.
     
     Args:
@@ -33,7 +35,7 @@ def write_device(device, path=(DB_PATH + 'dev/'), update=True, error_code=''):
     path = path + filename + '/' 
     filename = filename + '.ndv'
     
-    log('# Writing %s to file using pickle' % filename)
+    log('# write_device: Writing %s to file using pickle' % filename)
     
     if not os.path.exists(path):
         os.makedirs(path)
@@ -43,22 +45,6 @@ def write_device(device, path=(DB_PATH + 'dev/'), update=True, error_code=''):
     
     #update_index(device, path + filename)
     
-    
-def update_index(index):
-    if not os.path.exists(DB_PATH):
-        os.makedirs(DB_PATH)
-    
-    with open(index_path, 'w') as outfile:
-        for entry in index:
-            outfile.write('\n' + 
-                '[,]'.join([
-                    str(entry['ip']),
-                    str(entry['serial']),
-                    str(entry['updated'])
-                    ])
-                )
-    
-    log('# Writing index to file.')
 
 
 def load_index():
@@ -80,15 +66,52 @@ def load_index():
                 # Split each index entry into a nice little dict object.
                 line = line.rstrip('\n')
                 if line == '': continue
-                line = line.split('[,]')
+                line = line.split(',')
                 entry = {
-                    'ip': line[0],
-                    'serial': line[1],
-                    'updated': line[2]
+                    'ip': line[0].strip(),
+                    'name': line[1].strip(),
+                    'updated': line[2].strip()
                     } 
                 
                 index.append(entry)
     return index
+
+    
+def update_index(index):
+    log('# update_index: Starting write.')
+    
+    if not os.path.exists(DB_PATH):
+        os.makedirs(DB_PATH)
+    
+    with open(index_path, 'w') as outfile:
+        for entry in index:
+
+            output = '{:15},{:30},{}'.format(
+                str(entry['ip']).replace(',', ';'),
+                str(entry['name']).replace(',', ';'),
+                str(entry['updated'].replace(',', ';'))
+                )
+            outfile.write('\n' + output)
+    
+    log('# update_index: Finished writing index.')
+
+
+def backup_config(raw_config):
+    pass
+
+
+def update_pending_devices(device_list):
+    if not os.path.exists(DB_PATH):
+        os.makedirs(DB_PATH)
+    
+    # Open the pending devices list, overwriting anything in it.
+    with open(pending_path, 'w') as outfile:
+        for (ip, platform) in device_list:
+            outfile.write('\n{:15}, {}'.format(ip,platform))
+    
+    log('# update_pending_devices: Writing devices to file.')
+
+
 
 
 
@@ -106,14 +129,13 @@ def log_failed_device(msg='', device_ip='', error=''):
     """ 
 
     log(msg, device_ip)
-    
-    output = '[,]'.join([msg, 
-                         datetime.now().strftime(TIME_FORMAT),
-                         device_ip,
-                         str(error)
-                         ])
-    
-    
+       
+    output = '{:19}, {:15}, {}, {}'.format(
+            datetime.now().strftime(TIME_FORMAT),
+            device_ip,
+            msg.replace(',', ';'),
+            str(error).replace(',', ';')
+            )
     
     if not os.path.exists(DB_PATH):
         os.makedirs(DB_PATH)
@@ -143,11 +165,12 @@ def log(msg, device_ip='', print_out=True):
         Boolean: True if write was successful, False otherwise.
     """ 
     
-    output = '[,]'.join([msg, 
-                         datetime.now().strftime(TIME_FORMAT),
-                         device_ip
-                         ])
     
+    output = '{:19}, {:15}, {}'.format(
+                datetime.now().strftime(TIME_FORMAT),
+                device_ip,
+                msg.replace(',', ';'))
+                
     if print_out: print(msg)
     
     if not os.path.exists(DB_PATH):

@@ -11,9 +11,13 @@ def parse_hostname(raw_config, ssh_connection=''):
     log('# parse_hostname: Starting')
     
     output = re.search('^hostname (.+)\n', raw_config, re.MULTILINE)
-    if output: return output.group(1)
+    if output: 
+        log('# parse_hostname: Regex found {}'.format(output.group(1)))
+        return output.group(1)
     
-    if ssh_connection == '': return ''
+    if ssh_connection == '': 
+        log('! parse_hostname: No ssh_connection received')
+        return ''
     
     # If the hostname couldn't be parsed, get it from the prompt    
     for i in range(5):
@@ -21,20 +25,24 @@ def parse_hostname(raw_config, ssh_connection=''):
             output = ssh_connection.find_prompt()
         except ValueError:
             ssh_connection.global_delay_factor += DELAY_INCREASE
-            log('# parse_hostname: Failed to find the prompt during attempt %s. Increasing delay to %s'  % (str(i+1), ssh_connection.global_delay_factor))
+            log('! parse_hostname: Failed to find the prompt during attempt %s. Increasing delay to %s'  % (str(i+1), ssh_connection.global_delay_factor))
             sleep(1)
             continue
                     
         if '#' in output: 
-            log('# parse_hostname: Found ' + output)
+            log('# parse_hostname: Config parsing found ' + output)
             return output.split('#')[0]
         else: sleep(1)
     
     # Last case scenario, return nothing
+    log('! parse_hostname: No hostname found.')
     return ''
 
 
 def parse_nxos_interfaces(raw_config=''):
+    
+    log('# parse_nxos_interfaces: Starting')
+    
     # If no device config was passed, return it now
     if raw_config == '': return
     
@@ -74,11 +82,13 @@ def get_ios_interfaces(ssh_connection, raw_config=''):
         try: raw_output = ssh_connection.send_command_expect('sh ip int br', max_loops=30)
         except: 
             ssh_connection.global_delay_factor += DELAY_INCREASE
-            log('# get_ios_interfaces: Show ip interface brief attempt %s failed. New delay: %s' % (str(i+1), ssh_connection.global_delay_factor))
-            continue
-        else: 
+            log('? get_ios_interfaces: Show ip interface brief attempt %s failed. New delay: %s' % (str(i+1), ssh_connection.global_delay_factor))
             if i < 2: pass
-            else: return
+            else: 
+                log('! get_ios_interfaces: Sh ip int br failed to return output')
+                raise
+        
+        
     
     interfaces = []
     
@@ -146,7 +156,7 @@ def get_serials(ssh_connection):
     for i in range(2):
         try: raw_output = ssh_connection.send_command_expect('sh inv', max_loops=((i+1)*30))
         except: 
-            print('# Show inventory attempt %s failed.' % str(i+1))
+            log('! get_serials: Show inventory attempt %s failed.' % str(i+1))
             continue
         else: break
     
@@ -154,7 +164,7 @@ def get_serials(ssh_connection):
     output = re.findall(r'^Name.*?["](.+?)["][\s\S]*?Desc.*?["](.+?)["][\s\S]*?SN:[ ]?(\w+)', raw_output, re.MULTILINE | re.IGNORECASE)
     
     if len(output[0]) != 3:
-        log('!!! Output of %s is not normal. Len: %s, Output: %s' % 
+        log('! get_serials: Output of %s is not normal. Len: %s, Output: %s' % 
             (ssh_connection.ip, len(output[0]), output[0]), ssh_connection.ip)
         return ''
     
@@ -179,7 +189,7 @@ def get_device(ip, platform='cisco_ios', global_delay_factor=1):
     # that we can reuse in multiple functions
     try: ssh_connection = start_cli_session(ip, platform, global_delay_factor)
     except Exception as e:
-        log('# get_device: Failed getting %s device %s' % (ip, platform), ip)
+        log('! get_device: Failed getting %s device %s' % (ip, platform), ip)
         raise
     
     device = network_device()
@@ -190,11 +200,14 @@ def get_device(ip, platform='cisco_ios', global_delay_factor=1):
     device.device_name = parse_hostname(device.config, ssh_connection)
     device.neighbors = get_cdp_neighbors(ssh_connection)
     
-    if 'ios' in platform:
-        device.interfaces = get_ios_interfaces(ssh_connection, device.config)
-    elif 'nx' in platform:
-        device.interfaces = parse_nxos_interfaces(device.config)
-    
+    try:
+        if 'ios' in platform:
+            device.interfaces = get_ios_interfaces(ssh_connection, device.config)
+        elif 'nx' in platform:
+            device.interfaces = parse_nxos_interfaces(device.config)
+    except:
+        log('! get_device: Failed to retrieve interfaces from {}'.format(ip))
+        raise
     
     ssh_connection.disconnect()
     
@@ -204,14 +217,14 @@ def get_device(ip, platform='cisco_ios', global_delay_factor=1):
     
     
 def get_config(ssh_connection):
-    print ('# get_config: Beginning config download from %s' % ssh_connection.ip)
+    log('# get_config: Beginning config download from %s' % ssh_connection.ip)
     raw_config = ''
     
     # enter enable mode
     for i in range(2):
         try: ssh_connection.enable()
         except Exception as e: 
-            log('# get_config: Enable failed on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip)
+            log('! get_config: Enable failed on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip)
             ssh_connection.global_delay_factor += DELAY_INCREASE
             sleep(1)
             continue
@@ -224,7 +237,7 @@ def get_config(ssh_connection):
     for i in range(2):
         try: raw_config = ssh_connection.send_command_expect('sh run')
         except Exception as e: 
-            log('# get_config: Config download failed on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip)
+            log('! get_config: Config download failed on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip)
             ssh_connection.global_delay_factor += DELAY_INCREASE
             sleep(2)
             continue
