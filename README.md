@@ -20,7 +20,7 @@ The index is a list of **all known neighbors.** It is a comma separated, table-f
 * Timestamp
 
 ```
-10.0.255.49     , FastEthernet0/23:oh-mas-core-rt1, 10.0.255.50     , FastEthernet0/1:oh-mas-dist-sw4,   2017-02-02 23:05:30
+10.0.255.49     , FastEthernet0/23:oh-mas-core-rt1, 10.0.255.50, FastEthernet0/1:oh-mas-dist-sw4, 2017-02-02 23:05:30
 ```
 
 ### failed.db
