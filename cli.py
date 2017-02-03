@@ -70,14 +70,14 @@ def start_cli_session(ip, platform, global_delay_factor = 1):
         ConnectHandler: Netmiko ConnectHandler object opened to the enable prompt 
     """
     
-    log('# start_cli_session: Connecting to %s device %s' % (platform, ip), ip)
+    log('# Connecting to %s device %s' % (platform, ip), ip, proc='start_cli_session')
     
     # Get the username and password
     credList = getCreds()
     
     # Check to see if SSH (port 22) is open
     if not port_is_open(22, ip):
-        log('# start_cli_session: Port 22 is closed on %s' % ip, ip)
+        log('# Port 22 is closed on %s' % ip, ip, proc='start_cli_session')
     else: 
         # Try logging in with each credential we have
         for username, password in credList:
@@ -91,21 +91,21 @@ def start_cli_session(ip, platform, global_delay_factor = 1):
                     secret=password,
                     global_delay_factor=global_delay_factor
                 )
-                log('# start_cli_session: Successful ssh auth to %s using %s, %s' % (ip, username, password[:2]))
+                log('# Successful ssh auth to %s using %s, %s' % (ip, username, password[:2]), proc='start_cli_session')
                 return ssh_connection
     
             except NetMikoAuthenticationException:
-                log ('? start_cli_session: SSH auth error to %s using %s, %s' % (ip, username, password[:2]))
+                log ('? SSH auth error to %s using %s, %s' % (ip, username, password[:2]), proc=start_cli_session)
                 continue
             except NetMikoTimeoutException:
-                log('# start_cli_session: SSH to %s timed out.' % ip)
+                log('# SSH to %s timed out.' % ip, proc='start_cli_session')
                 # If the device is unavailable, don't try any other credentials
                 break
     
     
     # Check to see if port 23 (telnet) is open
     if not port_is_open(23, ip):
-        log('# start_cli_session: Port 23 is closed on %s' % ip, ip)
+        log('# Port 23 is closed on %s' % ip, ip, proc='start_cli_session')
     else:
         for username, password in credList:
             try:
@@ -117,14 +117,14 @@ def start_cli_session(ip, platform, global_delay_factor = 1):
                     password=password,
                     secret=password
                 )
-                log('# start_cli_session: Successful telnet auth to %s using %s, %s' % (ip, username, password[:2]))
+                log('# Successful telnet auth to %s using %s, %s' % (ip, username, password[:2]), proc='start_cli_session')
                 return ssh_connection
             
             except NetMikoAuthenticationException:
                 log('? start_cli_session: Telnet auth error to %s using %s, %s' % (ip, username, password[:2]))
                 continue
             except:
-                log('# start_cli_session: Telnet to %s timed out.' % ip)
+                log('# Telnet to %s timed out.' % ip, proc='start_cli_session')
                 # If the device is unavailable, don't try any other credentials
                 break
     

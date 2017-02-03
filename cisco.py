@@ -8,11 +8,11 @@ from global_vars import DELAY_INCREASE
 
 
 def parse_hostname(raw_config, ssh_connection=''):
-    log('# parse_hostname: Starting')
+    log('# Starting', proc='parse_hostname')
     
     output = re.search('^hostname (.+)\n', raw_config, re.MULTILINE)
     if output: 
-        log('# parse_hostname: Regex parsing the config found {}'.format(output.group(1)))
+        log('# Regex parsing the config found {}'.format(output.group(1)), proc='parse_hostname')
         return output.group(1)
     
     if ssh_connection == '': 
@@ -30,7 +30,7 @@ def parse_hostname(raw_config, ssh_connection=''):
             continue
                     
         if '#' in output: 
-            log('# parse_hostname: Prompt parsing found ' + output)
+            log('# Prompt parsing found ' + output, proc='parse_hostname')
             return output.split('#')[0]
         else: sleep(1)
     
@@ -41,7 +41,7 @@ def parse_hostname(raw_config, ssh_connection=''):
 
 def parse_nxos_interfaces(raw_config=''):
     
-    log('# parse_nxos_interfaces: Starting')
+    log('# Starting', proc='parse_nxos_interfaces')
     
     # If no device config was passed, return it now
     if raw_config == '': return
@@ -63,12 +63,10 @@ def parse_nxos_interfaces(raw_config=''):
         try: i.interface_description = re.search(r'description[ ]+(.+)$', interf, re.IGNORECASE | re.MULTILINE).group(1)
         except: pass
         
-        # IP and Subnet (Might duplicate effort for IP, but whatever)
-        ip_info = re.search(r'ip address.*?(\d{1,3}(?:\.\d{1,3}){3})(?:(\/\d+)|[ ]+(\d{1,3}(?:\.\d{1,3}){3}))', interf, re.IGNORECASE | re.MULTILINE)
-        try: i.interface_ip = ip_info.group(1)
-        except: pass
-        try: i.interface_subnet = ip_info.group(2)
-        except: pass
+        # IP and Subnet (Matches both octets and CIDR)
+        ip_info = re.search(r'ip address.*?(\d{1,3}(?:\.\d{1,3}){3})[ ]?((?:\/\d+)|(?:\d{1,3}(?:\.\d{1,3}){3}))', interf, re.IGNORECASE | re.MULTILINE)
+        if ip_info and ip_info.group(1): i.interface_ip = ip_info.group(1)
+        if ip_info and ip_info.group(2): i.interface_subnet = ip_info.group(2)    
         
         # Add the new interface to the list of interfaces
         interfaces.append(i)
@@ -76,20 +74,15 @@ def parse_nxos_interfaces(raw_config=''):
     return interfaces            
 
 
-def get_ios_interfaces(ssh_connection, raw_config=''):
+
+def get_ios_int_br(ssh_connection):
     # Try three times to get the output, waiting longer each time 
     for i in range(2):
-        try: raw_output = ssh_connection.send_command_expect('sh ip int br', max_loops=30)
+        try: raw_output = ssh_connection.send_command_expect('sh ip int br')
         except: 
             ssh_connection.global_delay_factor += DELAY_INCREASE
-            log('? get_ios_interfaces: Show ip interface brief attempt %s failed. New delay: %s' % (str(i+1), ssh_connection.global_delay_factor))
-            if i < 2: pass
-            else: 
-                log('! get_ios_interfaces: Sh ip int br failed to return output')
-                raise
+            log('? parse_ios_interfaces: Show ip interface brief attempt %s failed. New delay: %s' % (str(i+1), ssh_connection.global_delay_factor))
         
-        
-    
     interfaces = []
     
     # Process the interfaces
@@ -119,42 +112,61 @@ def get_ios_interfaces(ssh_connection, raw_config=''):
             
             interfaces.append(interf)
         except Exception as e: 
-            log('!!! Sh ip int br failed with error: ' + str(e))
-            
+            log('! Sh ip int br failed with error: ' + str(e), proc = 'parse_ios_interfaces')
+            continue
+    
+    return interfaces
         
-    # If no device config was passed, return it now
-    if raw_config == '': return interfaces
+     
+
+
+def parse_ios_interfaces(raw_config=''):
+    
+    log('# Starting ios interface parsing.', proc="parse_ios_interfaces")
+    interfaces = []
+    # If no device config was passed, return
+    if not raw_config: 
+        log('# No configuration passed. Returning.', proc = 'parse_ios_interfaces')
+        return interfaces
     
     # Split out the interfaces from the raw config
-    raw_interfaces = re.findall(r'\n(^interface[\s\S]+?)\n!', raw_config, re.MULTILINE)
+    raw_interfaces = re.findall(r'\n(^interface[\s\S]+?)\n!', raw_config, (re.MULTILINE|re.IGNORECASE))
     
-    # For each interface parsed from the raw config, match it to an existing 
-    # interface and parse it into structured data
+    # For each interface parsed from the raw config, create a new interface 
+    # object and parse it into structured data
     for interf in raw_interfaces:
-        try: i_name = re.search(r'^interface[ ]?(.+)$', interf, re.IGNORECASE | re.MULTILINE).group(1)
-        except: continue
         
-        for i in interfaces:
-            # If the config-parsed interface name matches the saved name
-            if i_name in i.interface_name: 
-                # Description
-                try: i.interface_description = re.search(r'description[ ]+(.+)$', interf, re.IGNORECASE | re.MULTILINE).group(1)
-                except: pass
-                
-                # IP and Subnet (Duplicates effort for IP, but whatever)
-                ip_info = re.search(r'ip address.*?(\d{1,3}(?:\.\d{1,3}){3})[ ]+(\d{1,3}(?:\.\d{1,3}){3})', interf, re.IGNORECASE | re.MULTILINE)
-                try: i.interface_ip = ip_info.group(1)
-                except: pass
-                try: i.interface_subnet = ip_info.group(2)
-                except: pass
+        temp_interf = interface()
+        
+        # Parse the interface name from the raw data. If that isn't possible, continue
+        try: temp_interf.interface_name = re.search(r'^interface[ ]?(.+)$', interf, re.IGNORECASE | re.MULTILINE).group(1)
+        except: 
+            log('! Raw config parsing failed to find interface name. Skipping interface', proc='parse_ios_interfaces')
+            continue
+        
+        # Description
+        try: temp_interf.interface_description = re.search(r'description[ ]+(.+)$', interf, re.IGNORECASE | re.MULTILINE).group(1)
+        except: pass
+        
+        try:
+            # IP and Subnet (Matches both octets and CIDR)
+            ip_info = re.search(r'ip address.*?(\d{1,3}(?:\.\d{1,3}){3})[ ]?((?:\/\d+)|(?:\d{1,3}(?:\.\d{1,3}){3}))', interf, re.IGNORECASE | re.MULTILINE)
+            if ip_info and ip_info.group(1): temp_interf.interface_ip = ip_info.group(1)
+            if ip_info and ip_info.group(2): temp_interf.interface_subnet = ip_info.group(2)    
+        except Exception as e:
+            log('! Exception while parsing IP and Subnet: {}'.format(str(e)),
+                proc = 'parse_ios_interfaces')
+            pass
+        
+        interfaces.append(temp_interf)
                 
     return interfaces            
 
 
 def get_serials(ssh_connection):
-     # Try three times to get the output, waiting longer each time 
+    # Try three times to get the output, waiting longer each time 
     for i in range(2):
-        try: raw_output = ssh_connection.send_command_expect('sh inv', max_loops=((i+1)*30))
+        try: raw_output = ssh_connection.send_command_expect('sh inv')
         except: 
             log('! get_serials: Show inventory attempt %s failed.' % str(i+1))
             continue
@@ -183,13 +195,12 @@ def get_serials(ssh_connection):
 
 def get_device(ip, platform='cisco_ios', global_delay_factor=1):
     '''Main method which returns a fully populated network_device object'''
-    
    
     # Open a connection to the device and return a session object
     # that we can reuse in multiple functions
     try: ssh_connection = start_cli_session(ip, platform, global_delay_factor)
-    except Exception as e:
-        log('! get_device: Failed getting %s device %s' % (ip, platform), ip)
+    except:
+        log('! Failed getting %s device %s' % (ip, platform), ip, proc='get_device')
         raise
     
     device = network_device()
@@ -202,22 +213,21 @@ def get_device(ip, platform='cisco_ios', global_delay_factor=1):
     
     try:
         if 'ios' in platform:
-            device.interfaces = get_ios_interfaces(ssh_connection, device.config)
+            device.merge_interfaces(get_ios_int_br(ssh_connection))
+            device.merge_interfaces(parse_ios_interfaces(device.config))
         elif 'nx' in platform:
             device.interfaces = parse_nxos_interfaces(device.config)
     except:
-        log('! get_device: Failed to retrieve interfaces from {}'.format(ip))
+        log('! Failed to retrieve interfaces from {}'.format(ip), proc='get_device')
         raise
     
     ssh_connection.disconnect()
-    
-    log(str(device))
     
     return device
     
     
 def get_config(ssh_connection):
-    log('# get_config: Beginning config download from %s' % ssh_connection.ip)
+    log('# Beginning config download from %s' % ssh_connection.ip, proc='get_config')
     raw_config = ''
     
     # enter enable mode
@@ -229,7 +239,7 @@ def get_config(ssh_connection):
             sleep(1)
             continue
         else: 
-            log('# get_config: Enable successful on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip)
+            log('# Enable successful on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip, proc='get_config')
             sleep(2)
             break
     
@@ -242,7 +252,7 @@ def get_config(ssh_connection):
             sleep(2)
             continue
         else:
-            log('# get_config: Config download successful on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip)
+            log('# Config download successful on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip, proc='get_config')
             sleep(1)
             break
     

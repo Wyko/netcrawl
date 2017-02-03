@@ -7,7 +7,9 @@ import os
 import pickle
 
 index_path = DB_PATH + 'index.db'
+neighborhood_path = DB_PATH + 'neighborhood.db' 
 pending_path = DB_PATH + 'pending.db'
+failed_path = DB_PATH + 'failed.db'
 device_path = DB_PATH + 'dev/'
 
 
@@ -35,7 +37,7 @@ def write_device(device, path=device_path, update=True, error_code=''):
     path = path + filename + '/' 
     filename = filename + '.ndv'
     
-    log('# write_device: Writing %s to file using pickle' % filename)
+    log('# Writing %s to file using pickle' % filename, proc='write_device')
     
     if not os.path.exists(path):
         os.makedirs(path)
@@ -43,16 +45,17 @@ def write_device(device, path=device_path, update=True, error_code=''):
     # Save the network_device to file
     pickle.dump(device, open( path + filename, "wb" ) )
     
-    #update_index(device, path + filename)
+    #update_neighborhood(device, path + filename)
     
 
 
-def load_index():
+def load_neighborhood():
     """Returns the index."""
     
-    log('# load_index: Loading index')
+    log('# Start populating the neighborhood', proc='load_neighborhood')
     
     if not os.path.exists(DB_PATH):
+        log('# Database path not found. Creating directory.', proc='load_neighborhood')
         os.makedirs(DB_PATH)
 
     index = []
@@ -74,26 +77,31 @@ def load_index():
                     } 
                 
                 index.append(entry)
+    
+    if len(index) >= 1: 
+        log('# Finished loading neighborhood. {} entries found.'.format(len(index)), proc='load_neighborhood')
+    else: 
+        log('# Finished. No previous entries found. Neighborhood empty.', proc='load_neighborhood')
     return index
 
     
-def update_index(index):
-    log('# update_index: Starting write.')
+def update_neighborhood(neighborhood):
+    log('# Starting update.', proc='update_neighborhood')
     
     if not os.path.exists(DB_PATH):
         os.makedirs(DB_PATH)
     
     with open(index_path, 'w') as outfile:
-        for entry in index:
+        for entry in neighborhood:
 
-            output = '{:15},{:30},{}'.format(
+            output = '{:16},{:30},{}'.format(
                 str(entry['ip']).replace(',', ';'),
                 str(entry['name']).replace(',', ';'),
                 str(entry['updated'].replace(',', ';'))
                 )
             outfile.write('\n' + output)
     
-    log('# update_index: Finished writing index.')
+    log('# Finished updating the neighborhood.', proc='update_neighborhood')
 
 
 def backup_config(raw_config):
@@ -101,21 +109,23 @@ def backup_config(raw_config):
 
 
 def update_pending_devices(device_list):
+    
+    log('# Starting write.', proc='update_pending_devices')
     if not os.path.exists(DB_PATH):
         os.makedirs(DB_PATH)
     
     # Open the pending devices list, overwriting anything in it.
     with open(pending_path, 'w') as outfile:
-        for (ip, platform, name) in device_list:
-            outfile.write('\n{:15}, {:15}, {}'.format(ip, platform, name))
+        for (i) in device_list:
+            outfile.write('\n{:15}, {:15}, {}'.format(i['ip'], i['netmiko_platform'], i['name']))
     
-    log('# update_pending_devices: Writing devices to file.')
+    log('# Finished writing devices to file.', proc='update_pending_devices')
 
 
 
 
 
-def log_failed_device(msg='', device_ip='', error='', cdp_name=''):
+def log_failed_device(msg='', device_ip='', error='', cdp_name='',  proc=''):
     """Logs a failed device.
     
     Args:
@@ -128,9 +138,9 @@ def log_failed_device(msg='', device_ip='', error='', cdp_name=''):
         Boolean: True if write was successful, False otherwise.
     """ 
 
-    log(msg, device_ip)
+    log(msg, device_ip, proc=proc)
        
-    output = '{:19}, {:15}, {:20.19}, {}, {}'.format(
+    output = '{:19}, {:15}, {:30.29}, {}, {}'.format(
             datetime.now().strftime(TIME_FORMAT),
             device_ip,
             cdp_name,
@@ -142,7 +152,7 @@ def log_failed_device(msg='', device_ip='', error='', cdp_name=''):
         os.makedirs(DB_PATH)
     
     # Open the error log
-    f = open(DB_PATH + 'failed.txt','a')
+    f = open(failed_path,'a')
     
     if f and not f.closed:
         f.write(output + '\n')
@@ -153,7 +163,7 @@ def log_failed_device(msg='', device_ip='', error='', cdp_name=''):
 
 
 
-def log(msg, device_ip='', print_out=True):
+def log(msg, device_ip='', print_out=True, proc=''):
     """Writes a message to the log.
     
     Args:
@@ -161,18 +171,28 @@ def log(msg, device_ip='', print_out=True):
         
     Optional Args:
         device_ip (string): The IP address of the device.
+        print_out (Boolean): If True, copies the message to console
         
     Returns:
         Boolean: True if write was successful, False otherwise.
     """ 
     
-    
-    output = '{:19}, {:15}, {}'.format(
-                datetime.now().strftime(TIME_FORMAT),
-                device_ip,
-                msg.replace(',', ';'))
+    if proc:
+        output = '{}, {:<25}, {:45}, {}'.format(
+                    datetime.now().strftime(TIME_FORMAT),
+                    proc,
+                    msg.replace(',', ';'),
+                    device_ip
+                    )
+        
+    else:
+        output = '{}, {:45}, {}'.format(
+                    datetime.now().strftime(TIME_FORMAT),
+                    msg.replace(',', ';'),
+                    device_ip
+                    )
                 
-    if print_out: print(msg)
+    if print_out: print('{:<25.25}: {}'.format(proc, msg))
     
     if not os.path.exists(DB_PATH):
         os.makedirs(DB_PATH)

@@ -7,7 +7,7 @@ def get_cdp_neighbors(ssh_connection):
     # Get the layer two neighbors for the device 
     try: cdp_output = get_raw_cdp_output(ssh_connection)
     except:
-        log('# get_cdp_neighbors: No CDP output retrieved from %s' % ssh_connection.ip)
+        log('# No CDP output retrieved from %s' % ssh_connection.ip, proc='get_cdp_neighbors')
         
     if not cdp_output: 
         return
@@ -29,17 +29,17 @@ def get_raw_cdp_output(ssh_connection):
         List of Strings: The raw CDP output, split into individual entries.
     """
     
-    log('# get_raw_cdp_output: Starting, device %s' % ssh_connection.ip)
+    log('# Starting, device %s' % ssh_connection.ip, proc='get_raw_cdp_output')
     
     # enter enable mode
     for i in range(2):
         try: ssh_connection.enable()
         except Exception as e: 
-            log('# get_raw_cdp_output: Enable failed on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip)
+            log('# Enable failed on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip, proc='get_raw_cdp_output')
             ssh_connection.global_delay_factor += DELAY_INCREASE
             continue
         else: 
-            log('# get_raw_cdp_output: Enable successful on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip)
+            log('# Enable successful on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip, proc='get_raw_cdp_output')
             break
             
     
@@ -49,12 +49,12 @@ def get_raw_cdp_output(ssh_connection):
     for i in range(2):
         try: result = ssh_connection.send_command_expect("show cdp neighbor detail")
         except Exception as e:
-            log('# get_raw_cdp_output: Sh cdp n det failed on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip)
+            log('# Sh cdp n det failed on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip, proc='get_raw_cdp_output')
             ssh_connection.global_delay_factor += DELAY_INCREASE
             sleep(1)
             continue
         else: 
-            log('# get_raw_cdp_output: Sh cdp n det successful on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip)
+            log('# Sh cdp n det successful on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip, proc='get_raw_cdp_output')
             break
  
     # Split the raw output by the common '---' separator and return a list of 
@@ -74,13 +74,20 @@ def parse_ip(cdp_input):
 
     
 def parse_netmiko_platform(cdp_input):
+    blacklist = [
+        'AIR',
+        'IP Phone'
+        ]
+    
     ios_strings = [
         'Internetwork Operating System Software',
         'IOS Software',
         'IOS (tm)'
         ]
     
-    if 'NX-OS' in cdp_input: 
+    if any(ext in cdp_input for ext in blacklist):
+        return ''
+    elif 'NX-OS' in cdp_input: 
         return "cisco_nxos"
     elif any(ext in cdp_input for ext in ios_strings): 
         return "cisco_ios"
