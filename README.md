@@ -10,16 +10,31 @@ This package is still in development and no part is ready for production use.
 
 ### File Structure
 
-#### Index
+#### index.db
 
-The index is a list of **all known cdp neighbors.** It is a comma separated document comtaining:
-* Timestamp
-* IP Address of the neighbor
-* Connected interface of the neighbor
+The index is a list of **all known neighbors.** It is a comma separated, table-formatted document containing the following:
+* IP Address of the neighbor (Multiple entries if a neighbor has multiple IPs)
+* Connected interface of the neighbor:Hostname of the neighbor
 * IP Address of the source device
-* Connected interface of the source device
+* Connected interface of the source device:Hostname of the source device
+* Timestamp
 
+```
+10.0.255.49     , FastEthernet0/23:oh-mas-core-rt1, 10.0.255.50     , FastEthernet0/1:oh-mas-dist-sw4,   2017-02-02 23:05:30
+```
 
+### failed.db
+
+This is a list of the devices which were not able to be scanned for one reason or another.
+* IP Address of the failed device
+* Hostname (if known)
+* Process which detected the failure
+* Failure Reason
+* Timestamp
+
+```
+10.0.255.49     , oh-mas-core-rt1, start_cli_session, All known credentials failed, 2017-02-02 23:05:30
+```
 
 
 ## Getting Started
