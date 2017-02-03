@@ -39,10 +39,11 @@ The index is a list of **all visited devices.** For each device a seperate entry
 
 The index is a list of **all unvisited devices.** For each device one entry is made. Each entry looks like:
 * One of the IP addresses of the device
-* Hostname of the device
+* Netmiko platform
+* Hostname
 
 ```
-10.0.255.49, oh-mas-core-rt1
+10.0.255.49, cisco_ios, oh-mas-core-rt1
 ```
 
 #### failed.db
