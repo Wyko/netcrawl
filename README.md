@@ -10,7 +10,7 @@ This package is still in development and no part is ready for production use.
 
 ### File Structure
 
-#### index.db
+#### neighborhood.db
 
 The index is a list of **all known neighbors.** It is a comma separated, table-formatted document containing the following:
 * IP Address of the neighbor (Multiple entries if a neighbor has multiple IPs)
