@@ -1,9 +1,9 @@
 from netmiko import ConnectHandler
 from netmiko import NetMikoAuthenticationException
 from netmiko import NetMikoTimeoutException
-from contextlib import closing
-import socket
-from io_file import log
+
+from utility import log, port_is_open
+
 
 def getCreds():
     """Get stored credentials using a the credentials module. 
@@ -25,27 +25,7 @@ def getCreds():
     return [(username, password)]  
         
 
-def port_is_open(port, address, timeout=4):
-    """Checks a socket to see if the port is open.
-    
-    Args:
-        port (int): The numbered TCP port to check
-        address (string): The IP address of the host to check.
-        
-    Optional Args:
-        timeout (int): The number of seconds to wait before timing out. 
-            Defaults to 5 seconds. Zero seconds disables timeout.
-    
-    Returns: 
-        bool: True if the port is open, False if closed.
-    """
-    
-    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as conn:
-            conn.settimeout(timeout)
-            if conn.connect_ex((address, port)) == 0:
-                    return True
-            else:
-                    return False 
+
 
         
 def start_cli_session(ip, platform, global_delay_factor = 1):

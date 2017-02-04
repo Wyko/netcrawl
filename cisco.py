@@ -3,8 +3,10 @@ from time import sleep
 from device_classes import interface, network_device
 from cdp import get_cdp_neighbors
 from cli import start_cli_session
-from io_file import log, log_failed_device
 from global_vars import DELAY_INCREASE 
+from utility import log
+from io_file import log_failed_device
+from netmiko.ssh_exception import NetMikoTimeoutException
 
 
 def parse_hostname(raw_config, ssh_connection=''):
@@ -193,30 +195,51 @@ def get_serials(ssh_connection):
     
 
 
-def get_device(ip, platform='cisco_ios', global_delay_factor=1):
+def get_device(ip, platform='cisco_ios', global_delay_factor=1, name= ''):
     '''Main method which returns a fully populated network_device object'''
    
     # Open a connection to the device and return a session object
     # that we can reuse in multiple functions
     try: ssh_connection = start_cli_session(ip, platform, global_delay_factor)
-    except:
-        log('! Failed getting %s device %s' % (ip, platform), ip, proc='get_device')
+    except Exception as e:
+        log_failed_device(
+            '! Failed connection to {1} at {0}'.format(ip, name), 
+            ip, 
+            error= e,
+            proc= 'get_device'
+            )
         raise
     
     device = network_device()
     
     device.management_ip = ssh_connection.ip
-    device.serial_numbers = get_serials(ssh_connection)
-    device.config = get_config(ssh_connection)
-    device.device_name = parse_hostname(device.config, ssh_connection)
-    device.neighbors = get_cdp_neighbors(ssh_connection)
     
+    try: device.serial_numbers = get_serials(ssh_connection)
+    except Exception as e:
+        log('! Exception {} occurred getting serial numbers.'.format(str(e)), proc='get_device')
+        raise
+    
+    try: device.config = get_config(ssh_connection)
+    except Exception as e:
+        log('! Exception {} occurred getting device config.'.format(str(e)), proc='get_device')
+        raise
+    
+    try: device.device_name = parse_hostname(device.config, ssh_connection)
+    except Exception as e:
+        log('! Exception {} occurred getting device name.'.format(str(e)), proc='get_device')
+        raise
+    
+    try: device.neighbors = get_cdp_neighbors(ssh_connection)
+    except Exception as e:
+        log('! Exception {} occurred getting device info.'.format(str(e)), proc='get_device')
+        raise
+        
     try:
         if 'ios' in platform:
             device.merge_interfaces(get_ios_int_br(ssh_connection))
             device.merge_interfaces(parse_ios_interfaces(device.config))
         elif 'nx' in platform:
-            device.interfaces = parse_nxos_interfaces(device.config)
+            device.merge_interfaces(parse_nxos_interfaces(device.config))
     except:
         log('! Failed to retrieve interfaces from {}'.format(ip), proc='get_device')
         raise

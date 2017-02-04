@@ -1,7 +1,7 @@
 import re
-from io_file import log, log_failed_device
 from global_vars import DELAY_INCREASE
 from time import sleep
+from utility import parse_ip, log
 
 def get_cdp_neighbors(ssh_connection):
     # Get the layer two neighbors for the device 
@@ -10,6 +10,7 @@ def get_cdp_neighbors(ssh_connection):
         log('# No CDP output retrieved from %s' % ssh_connection.ip, proc='get_cdp_neighbors')
         
     if not cdp_output: 
+        log('# Command successful but no CDP output retrieved from %s' % ssh_connection.ip, proc='get_cdp_neighbors')
         return
     
     # Parse out the CDP data and return a list of entries
@@ -66,11 +67,6 @@ def parse_system_name(cdp_input):
     if len(output)>1: return output[1] # Returns the more readable Device name if present
     elif output: return output[0] # Returns the device ID otherwise
     else: return ''
-    
-def parse_ip(cdp_input):
-    output = re.search(r"(1[0-9]{1,3}(?:\.\d{1,3}){3})", cdp_input, flags=re.I)
-    if output: return output.group(1)
-    else: return ''
 
     
 def parse_netmiko_platform(cdp_input):
@@ -95,24 +91,45 @@ def parse_netmiko_platform(cdp_input):
 
     
 def parse_system_platform(cdp_input):
-    output = re.search(r'Platform: ?(.+?),', cdp_input)
+    output = re.search(r'Platform: ?(.+?),', cdp_input, flags=re.I)
     if output: return output.group(1)
     else: return ''
-    
+
+
+def parse_source_interface(cdp_input):
+    output = re.search(r'^interface:[ ]?(.*?)[,\n]', cdp_input, flags=(re.I|re.M))
+    if output: return output.group(1)
+    else: return ''
+
+
+def parse_neighbor_interface(cdp_input):
+    output = re.search(r'^interface:.*?:[ ](.*?)[,\n ]', cdp_input, flags=(re.I|re.M))
+    if output: return output.group(1)
+    else: return ''
 
 def parse_neighbor(cdp_input):
     output = {
         'name': '',
         'ip': '',
-        #'management_ip': '',
+        'management_ip': '',
         'netmiko_platform': '',
-        'system_platform': ''
+        'system_platform': '',
+        'source_interface': '',
+        'neighbor_interface': '',
+        'software': '',
+        'raw_cdp': cdp_input,
         }
     
+    # Get each IP address
+    ip = parse_ip(cdp_input)
+    if ip and len(ip) > 0: output['ip'] = ip[0]
+    if ip and len(ip) > 1: output['management_ip'] = ip[1]
+    
     output['name'] = parse_system_name(cdp_input) 
-    output['ip'] = parse_ip(cdp_input)
     output['netmiko_platform'] = parse_netmiko_platform(cdp_input)
     output['system_platform'] = parse_system_platform(cdp_input)
+    output['source_interface'] = parse_source_interface(cdp_input)
+    output['neighbor_interface'] = parse_neighbor_interface(cdp_input)
     
     return output
 

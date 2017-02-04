@@ -2,7 +2,7 @@ import os
 current_file_path = __file__
 current_file_dir = os.path.dirname(__file__)
 
-DB_PATH = current_file_dir + '/database/' 
+DB_PATH = current_file_dir + '/runtime/' 
 
 # Define the timestamp format
 TIME_FORMAT = '%Y-%m-%d %H:%M:%S'
@@ -13,3 +13,5 @@ DELAY_INCREASE = 0.3
 
 # The delay factor s
 BASE_DELAY = 1
+
+

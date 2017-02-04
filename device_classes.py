@@ -1,5 +1,5 @@
 import re 
-from io_file import log
+from utility import log
 
 class interface():
     '''Generic network device interface'''
@@ -43,7 +43,9 @@ class network_device():
                 config = '',
                 management_ip = '',
                 serial_numbers = [],
-                other_ips=[]
+                other_ips=[],
+                netmiko_platform= '',
+                system_platform= '',
                 ):
         
         self.device_name = device_name
@@ -53,6 +55,8 @@ class network_device():
         self.management_ip = management_ip
         self.serial_numbers = serial_numbers
         self.other_ips = other_ips # A list of other interesting IPs (HSRP, GLBP, etc)
+        self.netmiko_platform = netmiko_platform
+        self.system_platform= system_platform
                 
     
     def add_ip(self, ip):
