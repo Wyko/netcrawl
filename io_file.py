@@ -1,10 +1,9 @@
 from datetime import datetime
 from os.path import isfile
-from global_vars import DB_PATH, TIME_FORMAT
-from utility import log
+from global_vars import DB_PATH, TIME_FORMAT, TIME_FORMAT_FILE
+from uti import log
 
-import os
-import pickle
+import os, pickle, uti
 
 visited_path = DB_PATH + 'visited.db'
 neighborhood_path = DB_PATH + 'neighborhood.db' 
@@ -37,7 +36,7 @@ def write_device(device, path=device_path, update=True, error_code=''):
     path = path + filename + '/' 
     filename = filename + '.ndv'
     
-    log('# Writing %s to file using pickle' % filename, proc='write_device')
+    log('Writing %s to file using pickle' % filename, proc='write_device', v= uti.N)
     
     if not os.path.exists(path):
         os.makedirs(path)
@@ -46,27 +45,54 @@ def write_device(device, path=device_path, update=True, error_code=''):
     pickle.dump(device, open( path + filename, "wb" ) )
     
     #update_neighborhood(device, path + filename)
+
+
+
+
+def save_config(device, path=device_path):
+    log('Saving config.', proc='save_config', v= uti.N)
     
+    if not os.path.exists(DB_PATH):
+        os.makedirs(DB_PATH)
     
-def log_failed_device(msg='', ip='', error='', cdp_name='',  proc=''):
+    filename = device.unique_name()
+    path = path + filename + '/' 
+    filename = filename + '_' + datetime.now().strftime(TIME_FORMAT_FILE) + '.cfg'
+    
+    with open(path + filename, 'a') as outfile:       
+        outfile.write('\n'.join([
+            datetime.now().strftime(TIME_FORMAT),
+            device.config,
+            '\n']))
+            
+    log('Finished saving config.', proc='save_config', v= uti.N)
+
+
+
+
+    
+def log_failed_device(msg, ip='', error='', name='',  proc=''):
     """Logs a failed device.
     
     Args:
-        ip (string): The IP address of the device.
+        msg (string): The message to write.
         
     Optional Args:
-        msg (string): The message to write.
+        ip (string): The IP address of the device.
+        error (Exception): The exception raised to cause the device to fail
+        name (string): The hostname of the device, if known
+        proc (string): The procedure name that failed. 
         
     Returns:
         Boolean: True if write was successful, False otherwise.
     """ 
 
-    log(msg, ip, proc=proc)
+    log(msg + ' - Error: ' + str(error), ip= ip, proc= proc, v= uti.C)
        
     output = '{:19}, {:15}, {:30.29}, {}, {}'.format(
             datetime.now().strftime(TIME_FORMAT),
             ip,
-            cdp_name,
+            name,
             msg.replace(',', ';'),
             str(error).replace(',', ';')
             )
@@ -85,28 +111,32 @@ def log_failed_device(msg='', ip='', error='', cdp_name='',  proc=''):
     else: return False  
 
 
-def write_visited_device(visited_entry):
-    """Appends a visited device to visited.db
+def update_visited(visited_list):
+    """Appends a list of visited devices to visited.db
     
     Args:
-        visited_entry (dict): The visited device entry as defined in main.add_to_visited
+        visited_list (List): Visited device entries as defined in main.add_to_visited
         
     Returns:
         Boolean: True if write was successful, False otherwise.
     """ 
-       
-    output = '{ip:15}, {name}, {serial}, {updated}'.format(
-            updated= datetime.now().strftime(TIME_FORMAT),
-            ip= visited_entry['ip'],
-            name= visited_entry['name'],
-            serial= visited_entry['serial'],
-            )
+    
+    if  type(visited_list) != list: visited_list= [visited_list]
+    output = ''
+    
+    for visited_entry in visited_list:
+        output += '{updated}, {ip:15}, {name}, {serial}\n'.format(
+                updated= datetime.now().strftime(TIME_FORMAT),
+                ip= visited_entry['ip'],
+                name= visited_entry['name'],
+                serial= visited_entry['serial'],
+                )
     
     if not os.path.exists(DB_PATH):
         os.makedirs(DB_PATH)
     
     # Open the error log
-    f = open(failed_path,'a')
+    f = open(visited_path,'a')
     
     if f and not f.closed:
         f.write(output + '\n')
@@ -116,13 +146,55 @@ def write_visited_device(visited_entry):
     else: return False  
 
 
+def load_pending():
+    """Returns a list of dicts containing all the pending devices."""
+    
+    log('Start populating pending devices', proc='load_pending', v= uti.N)
+    
+    if not os.path.exists(DB_PATH):
+        log('Database path not found. Creating directory.', proc='load_visited', v= uti.N)
+        os.makedirs(DB_PATH)
+
+    _devices = []
+    
+    # Check if the file exists
+    if isfile(pending_path):
+        
+        # Open visited.db
+        with open(pending_path, 'r') as infile:
+            for line in infile:
+                
+                #Check if the line is empty 
+                line = line.strip()
+                if not line: continue
+                
+                # Split each entry into a nice little dict object.
+                line = line.split(',')
+                line = [x.strip() for x in line]
+                
+                entry = {
+                    'ip': line[0],
+                    'netmiko_platform': line[1],
+                    'name': line[2],
+                    } 
+                
+                _devices.append(entry)
+    
+    if len(_devices) >= 1: 
+        log('Finished loading pending devices. {} entries found.'.format(len(_devices)), proc='load_pending', v= uti.N)
+    else: 
+        log('Finished. No previous entries found.', proc='load_pending', v= uti.N)
+        
+    return _devices
+
+
 def load_visited():
     """Returns a list of dicts containing all the devices we've visited."""
     
-    log('# Start populating visted devices', proc='load_visited')
+    log('Start populating visted devices', proc='load_visited', v= uti.N)
     
     if not os.path.exists(DB_PATH):
-        log('# Database path not found. Creating directory.', proc='load_visited')
+        log('Database path not found. Creating directory.', proc='load_visited', v= uti.N)
         os.makedirs(DB_PATH)
 
     visited_devices = []
@@ -140,42 +212,23 @@ def load_visited():
                 
                 # Split each entry into a nice little dict object.
                 line = line.split(',')
-                line = [x.strip for x in line]
+                line = [x.strip() for x in line]
                 
                 entry = {
-                    'ip': line[0],
-                    'name': line[1],
-                    'serial': line[2],
-                    'updated': line[3],
-                    } 
+                    'updated': line[0],
+                    'ip': line[1],
+                    'name': line[2],
+                    'serial': line[3],
+                    }
                 
                 visited_devices.append(entry)
     
     if len(visited_devices) >= 1: 
-        log('# Finished loading visited devices. {} entries found.'.format(len(visited_devices)), proc='load_visited')
+        log('Finished loading visited devices. {} entries found.'.format(len(visited_devices)), proc='load_visited', v= uti.N)
     else: 
-        log('# Finished. No previous entries found.', proc='load_visited')
+        log('Finished. No previous entries found.', proc='load_visited', v= uti.N)
         
     return visited_devices
-
-    
-def update_neighborhood(neighborhood):
-    log('# Starting update.', proc='update_neighborhood')
-    
-    if not os.path.exists(DB_PATH):
-        os.makedirs(DB_PATH)
-    
-    with open(neighborhood_path, 'w') as outfile:
-        for entry in neighborhood:
-
-            output = '{:16},{:30},{}'.format(
-                str(entry['ip']).replace(',', ';'),
-                str(entry['name']).replace(',', ';'),
-                str(entry['updated'].replace(',', ';'))
-                )
-            outfile.write('\n' + output)
-    
-    log('# Finished updating the neighborhood.', proc='update_neighborhood')
 
 
 def in_neighborhood(ip):
@@ -205,7 +258,7 @@ def backup_config(raw_config):
 
 def update_pending_list(device_list):
     
-    log('# Starting write.', proc='update_pending_list')
+    log('Starting write. {} devices remain in pending list.'.format(len(device_list)), proc='update_pending_list', v= uti.N)
     if not os.path.exists(DB_PATH):
         os.makedirs(DB_PATH)
     
@@ -214,6 +267,6 @@ def update_pending_list(device_list):
         for (i) in device_list:
             outfile.write('\n{:15}, {:15}, {}'.format(i['ip'], i['netmiko_platform'], i['name']))
     
-    log('# Finished writing devices to file.', proc='update_pending_list')
+    log('Finished writing pending device list to file.', proc='update_pending_list', v= uti.N)
 
     
