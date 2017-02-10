@@ -217,6 +217,8 @@ def add_to_visited(device):
 
 def normal_run(ip= '10.1.120.1', platform= 'cisco_ios'):
    
+    global pending_list_d, visited_list_d, failed_list_ips
+    
     # Populate the index
     visited_list_d.extend(load_visited())
     pending_list_d.extend(load_pending())
