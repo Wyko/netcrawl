@@ -279,7 +279,7 @@ def get_device(ip, platform='cisco_ios', global_delay_factor=1, name= '', debug=
     
     ssh_connection.disconnect()
     
-    log('Finished getting device.', proc='get_device', v= uti.H)
+    log('Finished getting {}'.format(device.unique_name()), proc='get_device', v= uti.H)
     return device
     
 
@@ -303,7 +303,7 @@ def get_config(ssh_connection):
             continue
         
         if len(raw_config) < 200:
-            log('Config download completed, but seems to short. Attempt: {} Current delay: {} Config: {})'.format(
+            log('Config download completed, but seems too short. Attempt: {} Current delay: {} Config: {})'.format(
                 str(i+1), ssh_connection.global_delay_factor, str(raw_config)), 
                 ssh_connection.ip, proc= 'get_config', 
                 v= uti.C

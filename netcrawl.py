@@ -6,8 +6,7 @@ from time import sleep
 from cisco import get_device
 from uti import log
 from device_classes import network_device
-import uti, sys, argparse
-from email.policy import default
+import uti, sys, argparse, textwrap
     
 
 # This list of Dicts store the devices we haven't visited yet
@@ -215,20 +214,20 @@ def add_to_visited(device):
     log('Added {} ips to the visited list'.format(counter), proc='add_to_visited', v= uti.N)
 
 
-def normal_run(ip= '10.1.120.1', platform= 'cisco_ios'):
-   
+def normal_run(ip= '10.1.120.1', platform= 'cisco_ios', ignore= False):
+    
     global pending_list_d, visited_list_d, failed_list_ips
     
-    # Populate the index
-    visited_list_d.extend(load_visited())
-    pending_list_d.extend(load_pending())
+    pending_list_d = [{
+        'ip': ip, 
+        'netmiko_platform': platform,
+        'name': ''
+        }]
     
-    if not pending_list_d:
-        pending_list_d = [{
-            'ip': '10.30.9.40', 
-             'netmiko_platform': 'cisco_ios',
-             'name': ''
-             }]
+    if not ignore:
+        # Populate the index
+        visited_list_d.extend(load_visited())
+        pending_list_d.extend(load_pending())
     
     while True:
         process_pending_list()
@@ -255,25 +254,32 @@ def single_run(ip, platform):
 
 
 def parse_cli():
-    parser = argparse.ArgumentParser(description='''
-This package will process a seed device and pull information from it. 
-If desired, it will then crawl the device's neighbors recursively and continue the process.''')
+    parser = argparse.ArgumentParser(
+        prog= 'NetCrawl',
+        formatter_class= argparse.RawTextHelpFormatter,
+        description='''
+This package will process a specified host and pull information from it. If desired, it can then crawl the device's neighbors recursively and continue the process.''')
     
     parser.add_argument(
         '-v',
-        '--verbose',
         type= int,
         dest= 'v',
         default= uti.HIGH,
         choices= range(0, 5),
         metavar= 'LEVEL',
-        help= '''Verbosity level. Logs with less importance than the global verbosity level will not be processed.
- 1: Critical alerts, 2: Non-critical alerts, 3: High level info, 4: Common info, 5: Debug level info.'''
+        help= textwrap.dedent(
+            '''\
+            Verbosity level. Logs with less importance than 
+            the global verbosity level will not be processed.
+              1: Critical alerts
+              2: Non-critical alerts 
+              3: High level info
+              4: Common info
+              5: Debug level info (All info)''')
         )
     
     parser.add_argument(
         '-p',
-        '--platform',
         dest= 'platform',
         metavar= 'PLATFORM',
         help= 'The Netmiko platform for the device',
@@ -290,6 +296,15 @@ If desired, it will then crawl the device's neighbors recursively and continue t
         )
     
     parser.add_argument(
+        '-i',
+        '--ignore',
+        action="store_true",
+        dest= 'ignore',
+        help= 'Ignore results of previous runs',
+        default = False
+        )
+    
+    parser.add_argument(
         'host',
         action='store',
         help= 'Hostname or IP address of the starting device'
@@ -298,8 +313,8 @@ If desired, it will then crawl the device's neighbors recursively and continue t
     
     args = parser.parse_args()
     
-    if (not args.host) or (not uti.is_ip(args.host)):
-        parser.error('Expected IP address as seed device.')
+    if (not args.host):
+        parser.error('Host not specified')
      
     return args
 
@@ -314,12 +329,19 @@ if __name__ == "__main__":
         # Set verbosity level for logging
         uti.VERBOSITY = args.v
         
-        if args.crawl: normal_run(ip= args.host, platform= args.platform)
-        else: single_run(ip= args.host, platform= args.platform)
+        if args.crawl: 
+            normal_run(
+                ip= args.host, 
+                platform= args.platform, 
+                ignore= args.ignore,
+                )
+        
+        else: 
+            single_run(ip= args.host, platform= args.platform)
     
+    else:
+        print('No arguments passed. Host is required.')
     
-    
-    #normal_run()
     
     
     
