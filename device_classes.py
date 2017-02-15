@@ -1,7 +1,7 @@
-import re, hashlib, util, datetime
 from util import log
-from global_vars import RUN_PATH, TIME_FORMAT_FILE, TIME_FORMAT
-
+from datetime import datetime
+from global_vars import DEVICE_PATH, TIME_FORMAT_FILE
+import re, hashlib, util, os
 
 class interface():
     '''Generic network device interface'''
@@ -52,12 +52,15 @@ class network_device():
         log('Saving config.', proc='save_config', v= util.N)
         
         filename = self.unique_name()
-        path = RUN_PATH + filename + '/' 
-        filename = filename + '_' + datetime.now().strftime(TIME_FORMAT_FILE) + '.cfg'  # @UndefinedVariable
+        path = DEVICE_PATH + filename + '/' 
+        filename = filename + '_' + datetime.now().strftime(TIME_FORMAT_FILE) + '.cfg'
+        
+        if not os.path.exists(path):
+            os.makedirs(path)
         
         with open(path + filename, 'a') as outfile:       
             outfile.write('\n'.join([
-                datetime.now().strftime(TIME_FORMAT),  # @UndefinedVariable
+                datetime.now().strftime(TIME_FORMAT_FILE),
                 self.config,
                 '\n']))
                 

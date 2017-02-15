@@ -1,8 +1,6 @@
 from io_file import log_failed_device
-from time import sleep
 from cisco import get_device
 from util import log
-from device_classes import network_device
 from global_vars import MAIN_DB_PATH, RUN_PATH
 import sys, argparse, textwrap, os, util, io_sql
     
@@ -11,34 +9,33 @@ import sys, argparse, textwrap, os, util, io_sql
 failed_list_ips = []
 
 def normal_run(ip= None, netmiko_platform= 'cisco_ios', ignore= False):
-
+    log('Starting Normal Run', proc= 'main.normal_run', v= util.H)
+    
     global failed_list_ips
     
     # Load the visited list
-    vlist = io_sql.visited_db(dbname= MAIN_DB_PATH, drop= True)
-    plist = io_sql.pending_db(dbname= MAIN_DB_PATH, drop= True)
+    vlist = io_sql.visited_db(dbname= MAIN_DB_PATH, drop= False)
+    nlist = io_sql.neighbor_db(dbname= MAIN_DB_PATH, drop= False)
     
-
-    plist.add_device_d(ip= ip, netmiko_platform= netmiko_platform)
+    # Add the seed device
+    nlist.add_device_d(ip= ip, netmiko_platform= netmiko_platform)
     
     # Process each device in the pending list
-    while len(plist) > 0:
-        log('---- Processing new pending device. {} devices pending. ----'.
-            format(len(plist)), proc ='normal_run', v= util.H)
+    while nlist.count_pending() > 0:
         
         # Get the next device from the pending list
-        device_d = plist.get_next()
-        log('Processing connection to device {name} at {ip}'.format(
-            ip= device_d['ip'], name= device_d['name']), 
-            proc='normal_run', v= util.H)
+        device_d = nlist.get_next()
         
         # Skip devices which have already been processed
         # This happens when multiple devices see the same neighbor
         if vlist.ip_exists(device_d['ip']): 
-            log('Device {1} at {0} has already been processed. Skipping.'.format(device_d['ip'],device_d['name']), proc='normal_run', v= util.N)
+            log('- Device {1} at {0} has already been processed. Skipping.'.format(device_d['ip'],device_d['name']), proc='normal_run', v= util.N)
             continue
-#         
-#         device = network_device()
+
+        log('---- Processing {name} at {ip} || {pending} devices pending ----'.format(
+            ip= device_d['ip'], name= device_d['name'], pending= nlist.count_pending()), 
+            proc='main.normal_run', v= util.H)
+    
         try: device = get_device(device_d['ip'], 
                                 device_d['netmiko_platform'],
                                 name = device_d['name'])
@@ -47,7 +44,7 @@ def normal_run(ip= None, netmiko_platform= 'cisco_ios', ignore= False):
             log(msg= 'Failed to start cli connection to {0}'.format(device_d['ip']), 
                 ip= device_d['ip'], 
                 error= e,
-                proc= 'process_pending_list',
+                proc= 'main.normal_run',
                 v= util.C)
             
             vlist.add_device_d(device_d)
@@ -58,17 +55,20 @@ def normal_run(ip= None, netmiko_platform= 'cisco_ios', ignore= False):
          
         # Save the device to disk and add all known IP's to the index
         device.save_config()
-        vlist.add_device(device)
+        nlist.add_device_neighbors(device)
+        vlist.add_device_nd(device)
 
 #         # Populate the new neighbor list with all newly found neighbor dict entries
 #         new_devices.extend(get_new_neighbors(device))
-
-    log('Run Complete.', proc='process_pending_list', v= util.H)
+    
+    
+    log('Normal run complete. {} devices pending.'.
+            format(nlist.count_pending()), proc ='main.normal_run', v= util.H)
 
 
 
 def single_run(ip, platform):
-    log('Processing connection to {}'.format(ip), proc='single_run', v= util.H)
+    log('Processing connection to {}'.format(ip), proc='main.single_run', v= util.H)
     
     # Process the device
     try: device = get_device(ip, platform)
@@ -158,6 +158,7 @@ This package will process a specified host and pull information from it. If desi
 
     
 if __name__ == "__main__":
+    log('##### Starting Run #####', proc= 'main.__main__', v= util.H)
     
     # Create the directory to host the logs and other files
     if not os.path.exists(RUN_PATH):
@@ -184,6 +185,7 @@ if __name__ == "__main__":
         print('No arguments passed. Host is required.')
      
      
+    log('##### Run Complete #####', proc= 'main.__main__', v= util.H)
      
     
     

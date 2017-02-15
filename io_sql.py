@@ -12,6 +12,7 @@ class sql_writer():
         self.db = sqlite3.connect(dbname)  # @UndefinedVariable
         self.db.row_factory = sqlite3.Row  # @UndefinedVariable
         self.cur = self.db.cursor()
+#         self.cur.execute('''PRAGMA foreign_keys = ON;''')
     
     def close(self):
         if self.db: self.db.close()
@@ -30,26 +31,45 @@ class sql_writer():
         
     def count(self, table):
         '''Counts the number of rows in the table'''
-        
-        self.cur.execute('''SELECT count(id) from {};'''.format(table))
+
+        self.cur.execute('SELECT count(id) from {};'.format(table) )
         return self.cur.fetchone()[0]
 
 
-class pending_db(sql_writer):
+
+class neighbor_db(sql_writer):
+    TABLE_NAME = 'Neighbor'
     
     def __init__(self, dbname, drop= True):
         sql_writer.__init__(self, dbname)
         self.create_table(drop)
     
     def __len__(self):
-        return sql_writer.count(self, 'Pending')
+        return sql_writer.count(self, self.TABLE_NAME)
     
     def ip_exists(self, ip):
-        return sql_writer.ip_exists(self, ip, 'Pending')
+        return sql_writer.ip_exists(self, ip, self.TABLE_NAME)
+    
+    def count_pending(self):
+        '''Counts the number of rows in the table'''
+        self.cur.execute('SELECT count(id) from Neighbor WHERE pending=1;')
+        return self.cur.fetchone()[0]
+    
+    def get_next(self):
+        self.cur.execute('SELECT * FROM Neighbor WHERE pending=1 ORDER BY id ASC LIMIT 1')
+        output = self.cur.fetchone()
+        
+        if output:
+            self.cur.execute('UPDATE Neighbor SET pending=0 WHERE id=?', (output['id'],))
+            self.db.commit()
+            return dict(output)
+        
+        else:
+            return None
     
     def add_device_d(self, device_d= None, **kwargs):
         
-        # Pending dict template
+        # Neighbor dict template
         _device_d = {
             'name': '',
             'ip': '',
@@ -75,12 +95,24 @@ class pending_db(sql_writer):
         
         else: return False
         
+        # Break if no IP address was supplied
+        if not _device_d['ip']: return False
+        
+        # If the device is an unvisited recognized device, mark it as pending
+        if _device_d['netmiko_platform'] and not sql_writer.ip_exists(
+            self, ip= _device_d['ip'], table= 'Visited'): 
+            
+            pending = 1
+        else: pending = 0
+        
         try:
-            self.db.execute('''
-                INSERT INTO Pending  
+            self.cur.execute('''
+                INSERT INTO Neighbor  
                     (
+                    working,
                     ip,
                     name,
+                    pending,
                     netmiko_platform,
                     system_platform,
                     source_interface,
@@ -90,40 +122,35 @@ class pending_db(sql_writer):
                     updated
                     )
                 VALUES 
-                    (
-                    '{ip}',
-                    '{name}',
-                    '{netmiko_platform}',
-                    '{system_platform}',
-                    '{source_interface}',
-                    '{neighbor_interface}',
-                    '{software}',
-                    '{raw_cdp}',
-                    '{updated}'
-                    );
-            '''.format(
-                    ip= _device_d['ip'],
-                    name= _device_d['name'],
-                    netmiko_platform= _device_d['netmiko_platform'],
-                    system_platform= _device_d['system_platform'],
-                    source_interface= _device_d['source_interface'],
-                    neighbor_interface= _device_d['neighbor_interface'],
-                    software= _device_d['software'],
-                    raw_cdp= _device_d['raw_cdp'],
-                    updated = datetime.now().strftime(TIME_FORMAT),  
+                    (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ;''',
+                (
+                _device_d['ip'],
+                _device_d['name'],
+                pending,
+                _device_d['netmiko_platform'],
+                _device_d['system_platform'],
+                _device_d['source_interface'],
+                _device_d['neighbor_interface'],
+                _device_d['software'],
+                _device_d['raw_cdp'],
+                datetime.now().strftime(TIME_FORMAT),  
                 ))
-        except sqlite3.IntegrityError:
+            
+        except sqlite3.IntegrityError as e:  # @UndefinedVariable
             log('Duplicate IP rejected: {}'.format(_device_d['ip']), 
-                proc= 'pending_db.add_device_d', 
+                proc= 'neighbor_db.add_device_d', error= e, 
                 v= util.D)
+            return False
+        
         else:
-            log('Device added to pending: {}'.format(_device_d['ip']), 
-                proc= 'pending_db.add_device_d', 
-                v= util.N)
+            log('Device added to Neighbor table: {}'.format(_device_d['ip']), 
+                proc= 'neighbor_db.add_device_d', 
+                v= util.D)
             self.db.commit()
     
     
-    def add_device_nd(self, _device= None, _list= []):
+    def add_device_neighbors(self, _device= None, _list= None):
         """Appends a device or a list of devices to the database
         
         Optional Args:
@@ -133,8 +160,9 @@ class pending_db(sql_writer):
         Returns:
             Boolean: True if write was successful, False otherwise.
         """
+        if not _list: _list= []
         
-        log('Starting to add devices to database', proc= 'pending_db.add_device_nd',
+        log('Starting to add devices to database', proc= 'neighbor_db.add_device_neighbors',
             v= util.N)
         
         # If a single device was passed, add it to the list
@@ -142,68 +170,18 @@ class pending_db(sql_writer):
         
         # Return an error if no data was passed
         if not _list: 
-            log('No devices to add', proc= 'pending_db.add_device_nd', v= util.A)
+            log('No devices to add', proc= 'neighbor_db.add_device_neighbors', v= util.A)
             return False
         
         
         for device in _list:
             for neighbor in device.neighbors:           
-                # Throw out all of the devices whose platform is not recognized  
-                if not neighbor['netmiko_platform']: 
-                    log('Neighbor %s:%s rejected due to platform.' % (
-                        neighbor['ip'], 
-                        neighbor['system_platform']), 
-                        proc='process_pending_list',
-                        print_out=False,
-                        v= util.ALERT
-                        ) 
-                    continue
                 
                 # Check if the ip is a known address.
                 # If not, add it to the list of ips to check
-                if not self.ip_exists(neighbor['ip'], 'Visited'):
-                    try:
-                        self.cur.execute('''
-                            INSERT INTO Pending  
-                                (
-                                ip,
-                                name,
-                                netmiko_platform,
-                                system_platform,
-                                source_interface,
-                                neighbor_interface,
-                                software,
-                                raw_cdp,
-                                updated
-                                )
-                            VALUES 
-                                (
-                                '{ip}',
-                                '{name}',
-                                '{netmiko_platform}',
-                                '{system_platform}',
-                                '{source_interface}',
-                                '{neighbor_interface}',
-                                '{software}',
-                                '{raw_cdp}',
-                                '{updated}'
-                                );
-                        '''.format(
-                                ip= neighbor['ip'],
-                                name= neighbor['name'],
-                                netmiko_platform= neighbor['netmiko_platform'],
-                                system_platform= neighbor['system_platform'],
-                                source_interface= neighbor['source_interface'],
-                                neighbor_interface= neighbor['neighbor_interface'],
-                                software= neighbor['software'],
-                                raw_cdp= neighbor['raw_cdp'],
-                                updated = datetime.now().strftime(TIME_FORMAT),  
-                            ))
-                    except sqlite3.IntegrityError:
-                        log('Duplicate IP rejected: {}'.format(ip), 
-                            proc= 'pending_db.add_device_nd', 
-                            v= util.D)
-                        continue
+                if not sql_writer.ip_exists(self, ip= neighbor['ip'], table= 'Visited'):
+                    self.add_device_d(neighbor)
+                    
                     
         self.db.commit()
         return True
@@ -212,11 +190,13 @@ class pending_db(sql_writer):
     
     def create_table(self, drop= True):
         
-        if drop: self.db.execute('DROP TABLE IF EXISTS Pending;')
+        if drop: self.db.execute('DROP TABLE IF EXISTS Neighbor;')
         self.db.execute('''
-            CREATE TABLE IF NOT EXISTS Pending(
+            CREATE TABLE IF NOT EXISTS Neighbor(
             id                 INTEGER PRIMARY KEY, 
-            ip                 TEXT NOT NULL UNIQUE,
+            ip                 TEXT NOT NULL,
+            pending            INTEGER NOT NULL,
+            working            INTEGER NOT NULL,
             name               TEXT,
             netmiko_platform   TEXT,
             system_platform    TEXT,
@@ -229,15 +209,7 @@ class pending_db(sql_writer):
             ''')
 
 
-    def get_next(self):
-        self.cur.execute('SELECT * FROM Pending ORDER BY id ASC LIMIT 1')
-        output = self.cur.fetchone()
-        
-        if output:
-            self.cur.execute('DELETE FROM Pending WHERE id=?', (output['id'],))
-            self.db.commit()
-           
-        return dict(output)
+
         
 
 class visited_db(sql_writer):
@@ -297,19 +269,19 @@ class visited_db(sql_writer):
                     updated = datetime.now().strftime(TIME_FORMAT),  
                 ))
             
-        except sqlite3.IntegrityError:
+        except sqlite3.IntegrityError:  # @UndefinedVariable
             log('Duplicate IP rejected: {}'.format(_device_d['ip']), 
                 proc= 'visited_db.add_device_d', 
                 v= util.D)
         else:
-            log('Device added to visiting: {}'.format(_device_d['ip']), 
+            log('Device added to Visited table: {}'.format(_device_d['ip']), 
                 proc= 'visited_db.add_device_d', 
-                v= util.N)
+                v= util.D)
             self.db.commit()
     
     
     
-    def add_device_nd(self, _device= None, _list= []):
+    def add_device_nd(self, _device= None, _list= None):
         """Appends a device or a list of devices to the database
         
         Optional Args:
@@ -319,6 +291,7 @@ class visited_db(sql_writer):
         Returns:
             Boolean: True if write was successful, False otherwise.
         """ 
+        if not _list: _list= []
         
         log('Starting to add devices to visited list', proc= 'visited_db.add_device_nd',
             v= util.N)
@@ -365,7 +338,7 @@ class visited_db(sql_writer):
                             serial= _device.first_serial(),
                             updated= datetime.now().strftime(TIME_FORMAT)
                         ))
-                except sqlite3.IntegrityError:
+                except sqlite3.IntegrityError:  # @UndefinedVariable
                     log('Duplicate IP rejected: {}'.format(ip), 
                         proc= 'visited_db.add_device_nd', 
                         v= util.D)
@@ -377,6 +350,12 @@ class visited_db(sql_writer):
             proc= 'visited_db.add_device_nd',
             v= util.N)
         return True
+    
+    
+    def count_unique(self):
+        '''Counts the number of unique devices in the database'''
+        self.cur.execute('''SELECT count(distinct Serial) from Visited''')
+        return self.cur.fetchone()[0]
     
     
     def create_table(self, drop= True):
