@@ -1,5 +1,6 @@
-import re, hashlib, uti
-from uti import log
+import re, hashlib, util, datetime
+from util import log
+from global_vars import RUN_PATH, TIME_FORMAT_FILE, TIME_FORMAT
 
 
 class interface():
@@ -15,28 +16,6 @@ class interface():
         self.tunnel_status=''
         self.interface_type=''
                  
-                 
-#                  interface_name='', 
-#                  interface_ip='', 
-#                  interface_subnet='', 
-#                  interface_description='', 
-#                  interface_status='', 
-#                  tunnel_destination_ip='', 
-#                  remote_interface='', 
-#                  tunnel_status='',
-#                  interface_type=''
-#                  ):
-#                      
-#         self.interface_name = interface_name # Interface label, I.E: FastEthernet0/42
-#         self.interface_ip = interface_ip # Interface IP address
-#         self.interface_subnet = interface_subnet # Interface interface_subnet mask 
-#         self.interface_description = interface_description # Interface interface_description
-#         self.interface_status = interface_status # 
-#         self.interface_type = interface_type # I.E: GigabitEthernet, Tunnel, Loopback
-#         self.remote_interface = remote_interface # An interface object representing the interface this one is connected to
-#         self.tunnel_status = tunnel_status # Online, Offline, or a custom status
-#         self.tunnel_destination_ip = tunnel_destination_ip # The globally routable IP address used to reach the far tunnel
-        
     
     def __str__(self):
             
@@ -58,28 +37,6 @@ class network_device():
         self.other_ips=[]
         self.netmiko_platform= ''
         self.system_platform= ''
-        
-#                 device_name = '',
-#                 interfaces = [],
-#                 neighbors = [],
-#                 config = '',
-#                 management_ip = '',
-#                 serial_numbers = [],
-#                 other_ips=[],
-#                 netmiko_platform= '',
-#                 system_platform= '',
-#                 ):
-#         
-#         self.device_name = device_name
-#         self.interfaces = interfaces # A list of interface objects
-#         self.neighbors = neighbors # A list of neighbor entries, as in CDP or LLDP
-#         self.config = config # The full configuration of the device
-#         self.management_ip = management_ip
-#         self.serial_numbers = serial_numbers
-#         self.other_ips = other_ips # A list of other interesting IPs (HSRP, GLBP, etc)
-#         self.netmiko_platform = netmiko_platform
-#         self.system_platform= system_platform
-                
     
     def add_ip(self, ip):
         """Adds an IP address to the list of other IPs
@@ -90,6 +47,24 @@ class network_device():
         if not ip in self.other_ips:
             self.other_ips.append(ip)
  
+ 
+    def save_config(self):
+        log('Saving config.', proc='save_config', v= util.N)
+        
+        filename = self.unique_name()
+        path = RUN_PATH + filename + '/' 
+        filename = filename + '_' + datetime.now().strftime(TIME_FORMAT_FILE) + '.cfg'  # @UndefinedVariable
+        
+        with open(path + filename, 'a') as outfile:       
+            outfile.write('\n'.join([
+                datetime.now().strftime(TIME_FORMAT),  # @UndefinedVariable
+                self.config,
+                '\n']))
+                
+        log('Finished saving config.', proc='save_config', v= util.N)
+    
+
+
  
     def neighbor_table(self, sh_src= True, sh_name= True, sh_ip = True, sh_platform = True ):
         """Returns a formatted table of neighbors.
@@ -146,7 +121,7 @@ class network_device():
                     log('Interface {} merged with old interface'.
                         format(new_interf.interface_name), 
                         proc='merge_interfaces',
-                        v = uti.D)
+                        v = util.D)
                     # For each variable in the interface class, compare and overwrite new ones.
                     for key in vars(new_interf).keys():
                         vars(old_interf)[key] = vars(new_interf)[key] 

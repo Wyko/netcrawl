@@ -40,7 +40,8 @@ def log(msg,
         print_out=True, 
         proc='', 
         log_path = os.path.dirname(__file__) + '/runtime/',
-        v = 4
+        v = 4,
+        error= None
         ):
     """Writes a message to the log.
     
@@ -59,6 +60,8 @@ def log(msg,
             v= 3: High level info
             v= 4: Common info
             v= 5: Debug level info
+            
+        error (Exception): 
         
     Returns:
         Boolean: True if write was successful, False otherwise.
