@@ -1,21 +1,17 @@
 from io_file import log_failed_device
 from cisco import get_device
 from util import log
-from global_vars import MAIN_DB_PATH, RUN_PATH
+from global_vars import MAIN_DB_PATH, RUN_PATH, DEVICE_DB_PATH
 import sys, argparse, textwrap, os, util, io_sql
     
 
-# This is the list of ips of failed devices
-failed_list_ips = []
-
-def normal_run(ip= None, netmiko_platform= 'cisco_ios', ignore= False):
+def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
     log('Starting Normal Run', proc= 'main.normal_run', v= util.H)
     
-    global failed_list_ips
-    
-    # Load the visited list
-    vlist = io_sql.visited_db(dbname= MAIN_DB_PATH, drop= False)
-    nlist = io_sql.neighbor_db(dbname= MAIN_DB_PATH, drop= False)
+    # Load the databases
+    vlist = io_sql.visited_db(MAIN_DB_PATH, **kwargs)
+    nlist = io_sql.neighbor_db(MAIN_DB_PATH, **kwargs)
+    dlist = io_sql.device_db(DEVICE_DB_PATH, **kwargs)
     
     # Add the seed device
     nlist.add_device_d(ip= ip, netmiko_platform= netmiko_platform)
@@ -25,11 +21,15 @@ def normal_run(ip= None, netmiko_platform= 'cisco_ios', ignore= False):
         
         # Get the next device from the pending list
         device_d = nlist.get_next()
+        if not device_d:
+            log('No device returned.', proc= 'main.normal_run', v= util.C)
+            break
         
         # Skip devices which have already been processed
         # This happens when multiple devices see the same neighbor
         if vlist.ip_exists(device_d['ip']): 
             log('- Device {1} at {0} has already been processed. Skipping.'.format(device_d['ip'],device_d['name']), proc='normal_run', v= util.N)
+            nlist.set_processed(device_d['id'])
             continue
 
         log('---- Processing {name} at {ip} || {pending} devices pending ----'.format(
@@ -48,19 +48,40 @@ def normal_run(ip= None, netmiko_platform= 'cisco_ios', ignore= False):
                 v= util.C)
             
             vlist.add_device_d(device_d)
+            nlist.set_processed(device_d['id'])
             continue
-
+        
+        if device.failed:
+            # Add the device to the list of visited devices
+            log(msg= 'Failed connection to {} due to: {}'.format(device_d['ip'], device.failed_msg), 
+                ip= device_d['ip'], 
+                proc= 'main.normal_run',
+                v= util.C)
+            
+            vlist.add_device_d(device_d)
+            nlist.set_processed(device_d['id'])
+            
+            # Add the failed device to the list
+            dlist.add_device_nd(device)
+            continue
+        
+        # Set the device as processed
         log('Successfully processed {}'.format(device.device_name), 
             proc='process_pending_list', v= util.NORMAL)
+        nlist.set_processed(device_d['id'])
          
-        # Save the device to disk and add all known IP's to the index
+        # Save the device to disk 
         device.save_config()
+        
+        # Save the device's neighbors to the database
         nlist.add_device_neighbors(device)
+        
+        # Add the device to the visited list
         vlist.add_device_nd(device)
+        
+        # Save the device to the device database
+        dlist.add_device_nd(device)
 
-#         # Populate the new neighbor list with all newly found neighbor dict entries
-#         new_devices.extend(get_new_neighbors(device))
-    
     
     log('Normal run complete. {} devices pending.'.
             format(nlist.count_pending()), proc ='main.normal_run', v= util.H)
@@ -124,20 +145,32 @@ This package will process a specified host and pull information from it. If desi
         )
 
     parser.add_argument(
-        '-c',
-        '--crawl',
+        '-s',
+        '--scan',
         action="store_true",
-        dest= 'crawl',
+        dest= 'recursive',
         help= 'Recursively scan neighbors for info',
         default = False
         )
     
     parser.add_argument(
-        '-i',
-        '--ignore',
+        '-r',
+        '--resume',
         action="store_true",
-        dest= 'ignore',
-        help= 'Ignore results of previous runs',
+        dest= 'resume',
+        help= 'Resume the last scan, if one was interrupted midway. Omitting '+
+            'this argument is not the same as using -c; Previous database '+
+            'entries are maintained. Scan starts with the seed device.',
+        default = False
+        )
+    
+    parser.add_argument(
+        '-c',
+        '--clean',
+        action="store_true",
+        dest= 'clean',
+        help= 'Ignore results of previous runs. Delete all existing database ' +
+              'entries and start with a clean database.',
         default = False
         )
     
@@ -171,11 +204,12 @@ if __name__ == "__main__":
         # Set verbosity level for logging
         util.VERBOSITY = args.v
          
-        if args.crawl: 
+        if args.recursive: 
             normal_run(
                 ip= args.host, 
                 netmiko_platform= args.platform, 
-                ignore= args.ignore,
+                resume= args.resume,
+                clean= args.clean,
                 )
          
         else: 

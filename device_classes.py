@@ -15,7 +15,12 @@ class interface():
         self.remote_interface=''
         self.tunnel_status=''
         self.interface_type=''
-                 
+        self.virtual_ip= ''
+    
+    
+    def type(self):
+        return re.split(r'\d', self.interface_name)[0]
+               
     
     def __str__(self):
             
@@ -28,15 +33,24 @@ class interface():
 class network_device():
     '''Generic network device'''
     def __init__(self):
-        self.device_name = ''
+        self.failed= True
+        self.failed_msg= None
+        self.device_name = None
         self.interfaces = []
         self.neighbors = []
-        self.config = ''
-        self.management_ip = ''
+        self.config = None
+        self.management_ip = None
         self.serial_numbers = []
         self.other_ips=[]
-        self.netmiko_platform= ''
-        self.system_platform= ''
+        self.netmiko_platform= None
+        self.system_platform= None
+        self.raw_cdp= None
+        self.TCP_22= False
+        self.TCP_23= False
+        self.AD_enabled= None
+        self.accessible= False
+        self.cred= None
+        self.software= None
     
     def add_ip(self, ip):
         """Adds an IP address to the list of other IPs
@@ -51,9 +65,8 @@ class network_device():
     def save_config(self):
         log('Saving config.', proc='save_config', v= util.N)
         
-        filename = self.unique_name()
-        path = DEVICE_PATH + filename + '/' 
-        filename = filename + '_' + datetime.now().strftime(TIME_FORMAT_FILE) + '.cfg'
+        path = DEVICE_PATH + self.unique_name() + '/' 
+        filename = datetime.now().strftime(TIME_FORMAT_FILE) + '.cfg'
         
         if not os.path.exists(path):
             os.makedirs(path)
@@ -159,12 +172,16 @@ class network_device():
         """Returns a unique identifier for this device"""
         
         output = []
-    
+        
+        if not (self.device_name or self.serial_numbers):
+            return None
+        
         if name and self.device_name: 
-            if len(self.device_name) > 12:
-                output.append(self.device_name[-12:])
+            if len(self.device_name) > 16:
+                output.append(self.device_name[-16:])
             else:
                 output.append(self.device_name)
+        else: return None
         
         # Make a hash of the serials        
         if serials and len(self.serial_numbers) > 0:

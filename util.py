@@ -91,7 +91,7 @@ def log(msg,
         os.makedirs(log_path)
     
     # Open the error log
-    f = open(log_path + 'log.db','a')
+    f = open(log_path + 'log.txt','a')
     
     if f and not f.closed:
         f.write(output + '\n')
@@ -122,3 +122,4 @@ def port_is_open(port, address, timeout=5):
                     return True
             else:
                     return False 
+    return False

@@ -63,7 +63,7 @@ def parse_nxos_interfaces(raw_config=''):
         
         try: i.interface_name = re.search(r'^interface[ ]?(.+)$', interf, re.IGNORECASE | re.MULTILINE).group(1)
         except: continue
-        else: i.interface_type = re.split(r'\d', i.interface_name)[0]
+        else: i.interface_type = str(re.split(r'\d', i.interface_name)[0])
         
         # Description
         try: i.interface_description = re.search(r'description[ ]+(.+)$', interf, re.IGNORECASE | re.MULTILINE).group(1)
@@ -185,19 +185,32 @@ def get_serials(ssh_connection):
     log('Starting to get serials', proc= 'get_serials', v= util.N)
     sleep(3)
     # Try three times to get the output, waiting longer each time 
-    for i in range(2):
+    limit= 3
+    for i in range(limit):
         try: raw_output = ssh_connection.send_command_expect('sh inv')
-        except: 
+        except Exception as e: 
             log('Show inventory attempt %s failed.' % str(i+1), proc= 'get_serials', v= util.A)
-            continue
-        else: break
+            if i < limit: continue
+            else:
+                raise ValueError('''get_serials: Show inventory attempt \
+finally failed on attempt {} with error: {}.'''.format(str(i+1), str(e))) 
     
-    # Get each serial number
-    output = re.findall(r'^Name.*?["](.+?)["][\s\S]*?Desc.*?["](.+?)["][\s\S]*?SN:[ ]?(\w+)', raw_output, re.MULTILINE | re.IGNORECASE)
-    
-    if not (output and output[0]):
-        log('Failed to get serials. Re.Findall produced no results. Raw_output was: {}'.format(
-            raw_output), ip= ssh_connection.ip, proc= 'get_serials', v= util.C)
+        # Get each serial number
+        output = re.findall(r'^Name.*?["](.+?)["][\s\S]*?Desc.*?["](.+?)["][\s\S]*?SN:[ ]?(\w+)', raw_output, re.MULTILINE | re.IGNORECASE)
+        
+        # See if valid results were produced.
+        if not (output and output[0]):
+            log('''Failed to get serials on attempt {}. Re.Findall produced no \
+results. Raw_output[:20] was: {}'''.format(str(i+1), raw_output[:20]), 
+                ip= ssh_connection.ip, proc= 'get_serials', v= util.A)
+            
+            # Continue if we haven't tried enough times yet, otherwise error out
+            if i < limit: continue
+            else:
+                raise ValueError('''get_serials: Finally failed to get serials \
+on attempt {}. Re.Findall produced no results. \
+Raw_output was: {}'''.format(str(i+1), raw_output))
+            
     
     serials = []
     
@@ -213,26 +226,47 @@ def get_serials(ssh_connection):
     
 
 
-def get_device(ip, platform='cisco_ios', global_delay_factor=1, name= '', debug= True):
+def get_device(ip, platform='cisco_ios', global_delay_factor=1, name= None, debug= True):
     '''Main method which returns a fully populated network_device object'''
    
     # Open a connection to the device and return a session object
     # that we can reuse in multiple functions
-    try: ssh_connection = start_cli_session(ip, platform, global_delay_factor)
+    try: cli_results = start_cli_session(ip, platform, global_delay_factor)
     except Exception as e:
-        raise ValueError('Error starting CLI session. Error: ' + str(e))
-    
+        raise ValueError('Error starting CLI session. No result set returned. ' +
+                         'Error: ' + str(e))
+   
     device = network_device()
-    
-    device.management_ip = ssh_connection.ip
+    device.management_ip = ip
+    device.netmiko_platform = platform
+    device.device_name = name
+    device.TCP_22 = cli_results['TCP_22']
+    device.TCP_23 = cli_results['TCP_23']
+    device.cred = cli_results['cred']
+
+    if cli_results['ssh_connection']:
+        ssh_connection = cli_results['ssh_connection']
+        device.accessible = True
+    else:
+        device.accessible = False
+        return device
+            
     
     # enter enable mode
-    for i in range(2):
+    limit = 3
+    for i in range(limit):
         try: ssh_connection.enable()
         except Exception as e: 
             log('Enable failed on attempt %s. Current delay: %s' % (str(i+1), 
                 ssh_connection.global_delay_factor), 
-                ip= ssh_connection.ip, proc= 'get_device', v= util.A)
+                ip= ssh_connection.ip, proc= 'get_device', v= util.A, error= e)
+            
+            # At the final try, return the failed device.
+            if i == limit-1: 
+                device.failed_msg= 'get_device: Could not enable.'
+                return device
+            
+            # Otherwise rest for one second and then try again
             ssh_connection.global_delay_factor += DELAY_INCREASE
             sleep(1)
             continue
@@ -246,22 +280,26 @@ def get_device(ip, platform='cisco_ios', global_delay_factor=1, name= '', debug=
     try: device.serial_numbers = get_serials(ssh_connection)
     except Exception as e:
         log('Exception occurred getting serial numbers: {}.'.format(str(e)), proc='get_device', v= util.C)
-        raise ValueError('get_device: Failed to get serial numbers. Error: ' + str(e))
+        device.failed_msg= 'get_device: Exception occurred getting serial numbers: {}.'.format(str(e))
+        return device
     
     try: device.config = get_config(ssh_connection)
     except Exception as e:
         log('Exception occurred getting device config: {}'.format(str(e)), proc='get_device', v= util.C)
-        raise ValueError('get_device: Failed to get device config. Error: ' + str(e))
+        device.failed_msg= 'get_device: Failed to get device config. Error: ' + str(e)
+        return device
     
     try: device.device_name = parse_hostname(device.config, ssh_connection)
     except Exception as e:
         log('Exception occurred getting device name: {}'.format(str(e)), proc='get_device', v= util.C)
-        raise ValueError('get_device: Failed to get device name. Error: ' + str(e))
+        device.failed_msg= 'get_device: Failed to get device name. Error: ' + str(e)
+        return device
     
-    try: device.neighbors = get_cdp_neighbors(ssh_connection)
+    try: device.neighbors, device.raw_cdp = get_cdp_neighbors(ssh_connection)
     except Exception as e:
         log('Exception occurred getting neighbor info: {}'.format(str(e)), proc='get_device', v= util.C)
-        raise ValueError('get_device: Failed to get neighbor info. Error: ' + str(e))
+        device.failed_msg= 'get_device: Failed to get neighbor info. Error: ' + str(e)
+        return device    
         
     try:
         if 'ios' in platform:
@@ -271,7 +309,8 @@ def get_device(ip, platform='cisco_ios', global_delay_factor=1, name= '', debug=
             device.merge_interfaces(parse_nxos_interfaces(device.config))
     except Exception as e:
         log('Failed to retrieve interfaces from {} with error: {}'.format(ip, str(e)), proc='get_device', v= util.C)
-        raise ValueError('get_device: Failed to retrieve interfaces from {} with error: {}'.format(ip, str(e)))
+        device.failed_msg= 'get_device: Failed to retrieve interfaces from {} with error: {}'.format(ip, str(e))
+        return device
     
     try: device.other_ips = get_other_ips(device.config)
     except: 
@@ -279,6 +318,7 @@ def get_device(ip, platform='cisco_ios', global_delay_factor=1, name= '', debug=
         pass
     
     ssh_connection.disconnect()
+    device.failed = False
     
     log('Finished getting {}'.format(device.unique_name()), proc='get_device', v= util.H)
     return device
@@ -304,6 +344,7 @@ def get_config(ssh_connection):
             continue
         
         if len(raw_config) < 200:
+
             log('Config download completed, but seems too short. Attempt: {} Current delay: {} Config: {})'.format(
                 str(i+1), ssh_connection.global_delay_factor, str(raw_config)), 
                 ssh_connection.ip, proc= 'get_config', 

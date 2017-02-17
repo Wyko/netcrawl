@@ -17,4 +17,5 @@ BASE_DELAY = 1
 
 RUN_PATH = current_file_dir + '/runtime/' 
 MAIN_DB_PATH = RUN_PATH + 'main.db'
+DEVICE_DB_PATH = RUN_PATH + 'devices.db'
 DEVICE_PATH = RUN_PATH + 'dev/'
