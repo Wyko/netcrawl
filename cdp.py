@@ -1,39 +1,49 @@
-import re, uti
+import re
+import util
 from global_vars import DELAY_INCREASE
 from time import sleep
-from uti import parse_ip, log
+from util import parse_ip, log
 
 def get_cdp_neighbors(ssh_connection):
-    # Get the layer two neighbors for the device 
-    try: cdp_output = get_raw_cdp_output(ssh_connection)
-    except:
-        log('No CDP output retrieved from %s' % ssh_connection.ip, proc='get_cdp_neighbors', v= uti.C)
-        raise ValueError('get_cdp_neighbors: No CDP output retrieved from %s' % ssh_connection.ip)
     
-    # Check if we got actual output    
-    if not cdp_output and cdp_output[0]: 
-        log('Command successful but no CDP output retrieved from %s' % ssh_connection.ip, proc='get_cdp_neighbors', v= uti.C)
-        raise ValueError('get_cdp_neighbors: Command successful but no CDP output retrieved from %s' % ssh_connection.ip)
-    
-    # Check whether CDP is enabled at all
-    if re.search(r'not enabled', cdp_output[0], re.I): 
-        log('CDP not enabled on %s' % ssh_connection.ip, proc='get_cdp_neighbors', v= uti.C)
-        raise ValueError('get_cdp_neighbors: CDP not enabled on %s' % ssh_connection.ip)
-    
-    # Parse out the CDP data and return a list of entries
-    cdp_neighbor_list = []
-    for entry in cdp_output:
-        cdp_neighbor = parse_neighbor(entry)
-    
-        if not is_empty(cdp_neighbor): cdp_neighbor_list.append(cdp_neighbor)
-    
-    if not len(cdp_neighbor_list) > 0:
-        log('No CDP neighbors found from {}. CDP_output was: {}'.format(
-            ssh_connection.ip, cdp_output), proc='get_cdp_neighbors', v= uti.C)
-    else:
-        log('{} CDP neighbors found from {}.'.format(len(cdp_neighbor_list), ssh_connection.ip), proc='get_cdp_neighbors', v= uti.NORMAL)
-
-    return cdp_neighbor_list
+    limit = 3
+    for i in range(limit):
+        # Get the layer two neighbors for the device 
+        try: raw_cdp = get_raw_cdp_output(ssh_connection)
+        except:
+            log('No CDP output retrieved from %s' % ssh_connection.ip, proc='get_cdp_neighbors', v= util.C)
+            if i >= limit: raise ValueError('get_cdp_neighbors: No CDP output retrieved from %s' % ssh_connection.ip)
+        else:
+            # Check if we got actual output    
+            if not raw_cdp: 
+                log('Command successful but no CDP output retrieved from %s' % ssh_connection.ip, proc='get_cdp_neighbors', v= util.C)
+                if i >= limit: raise ValueError('get_cdp_neighbors: Command successful but no CDP output retrieved from %s' % ssh_connection.ip)
+                continue
+            
+            # Check whether CDP is enabled at all
+            if re.search(r'not enabled', raw_cdp, re.I): 
+                log('CDP not enabled on %s' % ssh_connection.ip, proc='get_cdp_neighbors', v= util.C)
+                raise ValueError('get_cdp_neighbors: CDP not enabled on %s' % ssh_connection.ip)
+            
+            cdp_output= re.split(r'-{4,}', raw_cdp)
+            
+            # Parse out the CDP data and return a list of entries
+            cdp_neighbor_list = []
+            for entry in cdp_output:
+                cdp_neighbor = parse_neighbor(entry)
+            
+                if not is_empty(cdp_neighbor): cdp_neighbor_list.append(cdp_neighbor)
+            
+            # If no neighbors were found, try again
+            if not len(cdp_neighbor_list) > 0:
+                log('No CDP neighbors found on attempt {}. raw_cdp[20] was: {}'.format(
+                    str(i+1), raw_cdp[:20]), proc='get_cdp_neighbors', v= util.A)
+                if i >= limit: raise ValueError('get_cdp_neighbors: Command successful but no CDP output retrieved from %s' % ssh_connection.ip)
+                continue
+            else:
+                log('{} CDP neighbors found from {}.'.format(len(cdp_neighbor_list), ssh_connection.ip), proc='get_cdp_neighbors', v= util.NORMAL)
+        
+            return (cdp_neighbor_list, raw_cdp)
 
 
 
@@ -44,39 +54,43 @@ def get_raw_cdp_output(ssh_connection):
         List of Strings: The raw CDP output, split into individual entries.
     """
     
-    log('Starting, device %s' % ssh_connection.ip, proc='get_raw_cdp_output', v= uti.N)
+    log('Starting, device %s' % ssh_connection.ip, proc='get_raw_cdp_output', v= util.N)
     
     # enter enable mode
     for i in range(2):
         try: ssh_connection.enable()
         except Exception as e: 
-            log('Enable failed on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip, proc='get_raw_cdp_output', v= uti.A)
+            log('Enable failed on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip, proc='get_raw_cdp_output', v= util.A)
             ssh_connection.global_delay_factor += DELAY_INCREASE
             continue
         else: 
-            log('Enable successful on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip, proc='get_raw_cdp_output', v= uti.N)
+            log('Enable successful on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip, proc='get_raw_cdp_output', v= util.N)
             break
             
     
-    # execute the show cdp neighbor detail command
-    # we increase the delay_factor for this command, because it take some time if many devices are seen by CDP
-    result = ''
-    for i in range(2):
+    # Show cdp neighbor detail
+    limit = 3
+    for i in range(limit):
         try: result = ssh_connection.send_command_expect("show cdp neighbor detail")
         except Exception as e:
-            log('Sh cdp n det failed on attempt %s. Current delay: %s' % (str(i+1), ssh_connection.global_delay_factor), ssh_connection.ip, proc='get_raw_cdp_output', v= uti.A)
+            log('Sh cdp n det failed on attempt %s. Current delay: %s' % 
+                (str(i+1), ssh_connection.global_delay_factor), 
+                ip= ssh_connection.ip, proc= 'get_raw_cdp_output', v= util.A,
+                error= e)
+            
             ssh_connection.global_delay_factor += DELAY_INCREASE
             sleep(1)
             continue
         else: 
-            log('Sh cdp n det successful on attempt %s. Current delay: %s' % 
+            log('Sh cdp n det produced output on attempt {}'.format
                 (str(i+1), ssh_connection.global_delay_factor), 
-                ssh_connection.ip, proc='get_raw_cdp_output', v= uti.NORMAL)
+                ssh_connection.ip, proc='get_raw_cdp_output', v= util.NORMAL)
             break
  
     # Split the raw output by the common '---' separator and return a list of 
     # CDP entries
-    return re.split(r'-{4,}', result)
+    if result: return result
+    else: return None
 
 def parse_system_name(cdp_input):
     output = re.findall(r'(?:System Name|Device ID): ?(.*?)(?:\(|\n)', cdp_input, flags=re.I)
@@ -107,7 +121,7 @@ def parse_netmiko_platform(cdp_input):
         return "cisco_nxos"
     elif any(ext in cdp_input for ext in ios_strings): 
         return "cisco_ios"
-    else: return ''
+    else: return None
 
     
 def parse_system_platform(cdp_input):

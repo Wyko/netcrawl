@@ -40,7 +40,8 @@ def log(msg,
         print_out=True, 
         proc='', 
         log_path = os.path.dirname(__file__) + '/runtime/',
-        v = 4
+        v = 4,
+        error= ''
         ):
     """Writes a message to the log.
     
@@ -49,22 +50,22 @@ def log(msg,
         
     Optional Args:
         ip (string): The IP address.
-        print_out (Boolean): If True, copies the message to console
         proc (string): The process which caused the log entry
         log_path (string): Where to save the file
+        print_out (Boolean): If True, copies the message to console
         v (Integer): Verbosity level. Logs with verbosity above the global 
-            verbosity level will not be processed.  
+            verbosity level will not be printed out.  
             v= 1: Critical alerts
             v= 2: Non-critical alerts
             v= 3: High level info
             v= 4: Common info
             v= 5: Debug level info
+            
+        error (Exception): 
         
     Returns:
         Boolean: True if write was successful, False otherwise.
     """ 
-    
-    if v > VERBOSITY: return
     
     time_format = '%Y-%m-%d %H:%M:%S'
 
@@ -75,20 +76,22 @@ def log(msg,
 
     msg = info_str + ' ' + msg
     
-    output = '{_time}, {_proc:<25}, {_msg:60}, {_ip}'.format(
+    output = '{_time}, {_proc:<25}, {_msg:60}, {_ip}, {_error}'.format(
                 _time= datetime.now().strftime(time_format),
                 _proc= proc,
                 _msg = msg.replace(',', ';'),
-                _ip = ip                
+                _ip = ip,
+                _error = str(error)
                 )
-                
-    if print_out: print('{:<25.25}: {}'.format(proc, msg))
+    
+    # Print the message to console            
+    if v <= VERBOSITY and print_out: print('{:<25.25}: {}'.format(proc, msg))
     
     if not os.path.exists(log_path):
         os.makedirs(log_path)
     
     # Open the error log
-    f = open(log_path + 'log.db','a')
+    f = open(log_path + 'log.txt','a')
     
     if f and not f.closed:
         f.write(output + '\n')
@@ -119,3 +122,4 @@ def port_is_open(port, address, timeout=5):
                     return True
             else:
                     return False 
+    return False

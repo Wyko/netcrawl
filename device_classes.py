@@ -1,6 +1,7 @@
-import re, hashlib, uti
-from uti import log
-
+from util import log
+from datetime import datetime
+from global_vars import DEVICE_PATH, TIME_FORMAT_FILE
+import re, hashlib, util, os
 
 class interface():
     '''Generic network device interface'''
@@ -14,29 +15,12 @@ class interface():
         self.remote_interface=''
         self.tunnel_status=''
         self.interface_type=''
-                 
-                 
-#                  interface_name='', 
-#                  interface_ip='', 
-#                  interface_subnet='', 
-#                  interface_description='', 
-#                  interface_status='', 
-#                  tunnel_destination_ip='', 
-#                  remote_interface='', 
-#                  tunnel_status='',
-#                  interface_type=''
-#                  ):
-#                      
-#         self.interface_name = interface_name # Interface label, I.E: FastEthernet0/42
-#         self.interface_ip = interface_ip # Interface IP address
-#         self.interface_subnet = interface_subnet # Interface interface_subnet mask 
-#         self.interface_description = interface_description # Interface interface_description
-#         self.interface_status = interface_status # 
-#         self.interface_type = interface_type # I.E: GigabitEthernet, Tunnel, Loopback
-#         self.remote_interface = remote_interface # An interface object representing the interface this one is connected to
-#         self.tunnel_status = tunnel_status # Online, Offline, or a custom status
-#         self.tunnel_destination_ip = tunnel_destination_ip # The globally routable IP address used to reach the far tunnel
-        
+        self.virtual_ip= ''
+    
+    
+    def type(self):
+        return re.split(r'\d', self.interface_name)[0]
+               
     
     def __str__(self):
             
@@ -49,37 +33,24 @@ class interface():
 class network_device():
     '''Generic network device'''
     def __init__(self):
-        self.device_name = ''
+        self.failed= True
+        self.failed_msg= None
+        self.device_name = None
         self.interfaces = []
         self.neighbors = []
-        self.config = ''
-        self.management_ip = ''
+        self.config = None
+        self.management_ip = None
         self.serial_numbers = []
         self.other_ips=[]
-        self.netmiko_platform= ''
-        self.system_platform= ''
-        
-#                 device_name = '',
-#                 interfaces = [],
-#                 neighbors = [],
-#                 config = '',
-#                 management_ip = '',
-#                 serial_numbers = [],
-#                 other_ips=[],
-#                 netmiko_platform= '',
-#                 system_platform= '',
-#                 ):
-#         
-#         self.device_name = device_name
-#         self.interfaces = interfaces # A list of interface objects
-#         self.neighbors = neighbors # A list of neighbor entries, as in CDP or LLDP
-#         self.config = config # The full configuration of the device
-#         self.management_ip = management_ip
-#         self.serial_numbers = serial_numbers
-#         self.other_ips = other_ips # A list of other interesting IPs (HSRP, GLBP, etc)
-#         self.netmiko_platform = netmiko_platform
-#         self.system_platform= system_platform
-                
+        self.netmiko_platform= None
+        self.system_platform= None
+        self.raw_cdp= None
+        self.TCP_22= False
+        self.TCP_23= False
+        self.AD_enabled= None
+        self.accessible= False
+        self.cred= None
+        self.software= None
     
     def add_ip(self, ip):
         """Adds an IP address to the list of other IPs
@@ -90,6 +61,26 @@ class network_device():
         if not ip in self.other_ips:
             self.other_ips.append(ip)
  
+ 
+    def save_config(self):
+        log('Saving config.', proc='save_config', v= util.N)
+        
+        path = DEVICE_PATH + self.unique_name() + '/' 
+        filename = datetime.now().strftime(TIME_FORMAT_FILE) + '.cfg'
+        
+        if not os.path.exists(path):
+            os.makedirs(path)
+        
+        with open(path + filename, 'a') as outfile:       
+            outfile.write('\n'.join([
+                datetime.now().strftime(TIME_FORMAT_FILE),
+                self.config,
+                '\n']))
+                
+        log('Finished saving config.', proc='save_config', v= util.N)
+    
+
+
  
     def neighbor_table(self, sh_src= True, sh_name= True, sh_ip = True, sh_platform = True ):
         """Returns a formatted table of neighbors.
@@ -146,7 +137,7 @@ class network_device():
                     log('Interface {} merged with old interface'.
                         format(new_interf.interface_name), 
                         proc='merge_interfaces',
-                        v = uti.D)
+                        v = util.D)
                     # For each variable in the interface class, compare and overwrite new ones.
                     for key in vars(new_interf).keys():
                         vars(old_interf)[key] = vars(new_interf)[key] 
@@ -181,12 +172,16 @@ class network_device():
         """Returns a unique identifier for this device"""
         
         output = []
-    
+        
+        if not (self.device_name or self.serial_numbers):
+            return None
+        
         if name and self.device_name: 
-            if len(self.device_name) > 12:
-                output.append(self.device_name[-12:])
+            if len(self.device_name) > 16:
+                output.append(self.device_name[-16:])
             else:
                 output.append(self.device_name)
+        else: return None
         
         # Make a hash of the serials        
         if serials and len(self.serial_numbers) > 0:
