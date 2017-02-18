@@ -200,9 +200,9 @@ class network_device():
                 
     def __str__(self):
         return '\n'.join([
-            'Device Name:     ' + self.device_name,
-            'Unique Name:     ' + self.unique_name(),
-            'Management IP:   ' + self.management_ip,
+            'Device Name:     ' + str(self.device_name),
+            'Unique Name:     ' + str(self.unique_name()),
+            'Management IP:   ' + str(self.management_ip),
             'First Serial:    ' + str(self.serial_numbers[0]),
             'Serial Count:    ' + str(len(self.serial_numbers)),
             'Interface Count: ' + str(len(self.interfaces)),

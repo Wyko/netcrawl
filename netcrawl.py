@@ -103,6 +103,9 @@ def single_run(ip, platform):
             )
         return False
     
+    dlist = io_sql.device_db(DEVICE_DB_PATH)
+    dlist.add_device_nd(device)
+    dlist.db.close()
     # Output the device info to console
     print('\n' + str(device) + '\n')
     print(device.neighbor_table())
@@ -191,18 +194,19 @@ This package will process a specified host and pull information from it. If desi
 
     
 if __name__ == "__main__":
-    log('##### Starting Run #####', proc= 'main.__main__', v= util.H)
-    
-    # Create the directory to host the logs and other files
-    if not os.path.exists(RUN_PATH):
-        os.makedirs(RUN_PATH)
-    
+        
     # Parse CLI arguments
     if len(sys.argv[1:]) > 0: 
         args = parse_cli()
-         
+        
         # Set verbosity level for logging
         util.VERBOSITY = args.v
+        
+        # Create the directory to host the logs and other files
+        if not os.path.exists(RUN_PATH):
+            os.makedirs(RUN_PATH)
+        
+        log('##### Starting Run #####', proc= 'main.__main__', v= util.H)
          
         if args.recursive: 
             normal_run(
