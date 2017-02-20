@@ -5,7 +5,7 @@ from time import sleep
 from netmiko import ConnectHandler, NetMikoAuthenticationException
 from netmiko import NetMikoTimeoutException
 
-import re, hashlib, util, os
+import re, hashlib, util, os, cli
 import gvars
 
 class interface():
@@ -283,7 +283,11 @@ class network_device():
         
         self.parse_hostname()
         
-        self.get_cdp_neighbors()
+        try: self.neighbors, self.raw_cdp = cli.get_cdp_neighbors(self.ssh_connection)
+        except Exception as e:
+            log('Exception occurred getting neighbor info: {}'.format(str(e)), proc='get_device', v= util.C)
+            self.failed_msg= 'get_device: Failed to get neighbor info. Error: ' + str(e)
+            return False
             
         self.get_interfaces()
          
