@@ -19,12 +19,33 @@ DEBUG = 5
 D = 5
 
 
+def getCreds():
+    """Get stored credentials using a the credentials module. 
+    Requests credentials via prompt otherwise.
+    
+    Returns:
+        List of Dicts: {username, password, type} If the username and password 
+            had to be requested, the list will only have one entry.
+    """
+    
+    try: from credentials import credList
+    except ImportError: pass
+    else: 
+        if len(credList) > 0: return credList
+    
+    # If no credentials could be acquired the other way, get them this way.
+    import getpass
+    username = input("Username: ")
+    password = getpass.getpass("Password: ")
+    return [{'user': username, 'password': password, 'type': 'User Entered'}]  
+
 
 def parse_ip(raw_input):
     """Returns the first IP address matched in the input string. None if 
     nothing matched.
     """
     return re.findall(r"(1[0-9]{1,3}(?:\.\d{1,3}){3})", raw_input)
+
 
 def is_ip(raw_input):
     output = re.search(r"(^1[0-9]{1,3}(?:\.\d{1,3}){3}$)", raw_input)

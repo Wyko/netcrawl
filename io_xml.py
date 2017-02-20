@@ -1,6 +1,6 @@
-from device_classes import network_device
+from Devices.base_device import network_device
 import os.path
-import global_vars
+import gvars
 
 
 def open_tree(destination, create=True):

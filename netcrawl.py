@@ -1,8 +1,7 @@
-from io_file import log_failed_device
-from cisco import get_device
 from util import log
-from global_vars import MAIN_DB_PATH, RUN_PATH, DEVICE_DB_PATH
+from gvars import MAIN_DB_PATH, RUN_PATH, DEVICE_DB_PATH
 import sys, argparse, textwrap, os, util, io_sql
+from ssh_dispatcher import ConnectHandler
     
 
 def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
@@ -16,7 +15,7 @@ def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
     # Add the seed device
     nlist.add_device_d(ip= ip, netmiko_platform= netmiko_platform)
     
-    # Process each device in the pending list
+    # While there are pending neighbors, process each one
     while nlist.count_pending() > 0:
         
         # Get the next device from the pending list
@@ -26,7 +25,6 @@ def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
             break
         
         # Skip devices which have already been processed
-        # This happens when multiple devices see the same neighbor
         if vlist.ip_exists(device_d['ip']): 
             log('- Device {1} at {0} has already been processed. Skipping.'.format(device_d['ip'],device_d['name']), proc='normal_run', v= util.N)
             nlist.set_processed(device_d['id'])
@@ -35,53 +33,36 @@ def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
         log('---- Processing {name} at {ip} || {pending} devices pending ----'.format(
             ip= device_d['ip'], name= device_d['name'], pending= nlist.count_pending()), 
             proc='main.normal_run', v= util.H)
-    
-        try: device = get_device(device_d['ip'], 
+        
+        # Create the network device
+        device = ConnectHandler(device_d['ip'], 
                                 device_d['netmiko_platform'],
                                 name = device_d['name'])
+        
+        # Poll the device
+        try: device.process_device()
         except Exception as e:
-            # Add the device to the list of visited devices
-            log(msg= 'Failed to start cli connection to {0}'.format(device_d['ip']), 
-                ip= device_d['ip'], 
-                error= e,
-                proc= 'main.normal_run',
-                v= util.C)
-            
-            vlist.add_device_d(device_d)
-            nlist.set_processed(device_d['id'])
-            continue
+            device.failed = True
+            device.failed_msg = 'process_device to {} failed: {}'.format(device_d['ip'], str(e))
+        
+        # Record the device as being processed and save it
+        nlist.set_processed(device_d['id'])
+        vlist.add_device_nd(device)
+        dlist.add_device_nd(device)
         
         if device.failed:
             # Add the device to the list of visited devices
             log(msg= 'Failed connection to {} due to: {}'.format(device_d['ip'], device.failed_msg), 
-                ip= device_d['ip'], 
-                proc= 'main.normal_run',
-                v= util.C)
-            
-            vlist.add_device_d(device_d)
-            nlist.set_processed(device_d['id'])
-            
-            # Add the failed device to the list
-            dlist.add_device_nd(device)
+                ip= device_d['ip'], proc= 'main.normal_run', v= util.C)
             continue
-        
-        # Set the device as processed
-        log('Successfully processed {}'.format(device.device_name), 
-            proc='process_pending_list', v= util.NORMAL)
-        nlist.set_processed(device_d['id'])
-         
-        # Save the device to disk 
-        device.save_config()
-        
-        # Save the device's neighbors to the database
-        nlist.add_device_neighbors(device)
-        
-        # Add the device to the visited list
-        vlist.add_device_nd(device)
-        
-        # Save the device to the device database
-        dlist.add_device_nd(device)
 
+        else:
+            log('Successfully processed {}'.format(device.device_name), 
+                proc='process_pending_list', v= util.NORMAL)
+         
+            # Save the device to disl and it's neighbors to the db 
+            device.save_config()
+            nlist.add_device_neighbors(device)
     
     log('Normal run complete. {} devices pending.'.
             format(nlist.count_pending()), proc ='main.normal_run', v= util.H)
@@ -91,26 +72,29 @@ def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
 def single_run(ip, platform):
     log('Processing connection to {}'.format(ip), proc='main.single_run', v= util.H)
     
-    # Process the device
-    try: device = get_device(ip, platform)
-    except Exception as e:
-        # Add the device to the list of failed and processed devices
-        log_failed_device(
-            msg= 'Failed to start cli connection to {0}'.format(ip), 
-            ip= ip, 
-            error= e,
-            proc= 'single_run'
-            )
-        return False
+    device = ConnectHandler(ip= ip, netmiko_platform= platform)
     
+    # Process the device
+    try: device.process_device()
+    except Exception as e:
+        device.failed = True
+        device.failed_msg = 'process_device to {} failed: {}'.format(device.connect_ip, str(e))
+
+    # Save the device
     dlist = io_sql.device_db(DEVICE_DB_PATH)
     dlist.add_device_nd(device)
     dlist.db.close()
-    # Output the device info to console
-    print('\n' + str(device) + '\n')
-    print(device.neighbor_table())
-     
-    return True
+    
+    if device.failed:
+        log(msg= 'Failed connection due to: {}'.format(device.failed_msg), 
+            ip= device.connect_ip, proc= 'main.normal_run', v= util.C)
+        return False
+    
+    else:
+        # Output the device info to console
+        print('\n' + str(device) + '\n')
+        print(device.neighbor_table())
+        return True
 
 
 

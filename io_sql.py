@@ -1,5 +1,5 @@
 from datetime import datetime
-from global_vars import TIME_FORMAT
+from gvars import TIME_FORMAT
 from util import log
 import sqlite3
 import util
@@ -131,7 +131,7 @@ class neighbor_db(sql_writer):
         _device_d = {
             'name': None,
             'ip': None,
-            'management_ip': None,
+            'connect_ip': None,
             'netmiko_platform': None,
             'system_platform': None,
             'source_interface': None,
@@ -458,22 +458,20 @@ class device_db(sql_writer):
         
         # Return an error if no data was passed    
         if not (_list or _device): 
-            log('No devices to add', proc= 'device_db.add_device_nd',
-                v= util.A)
+            log('No devices to add', proc= 'device_db.add_device_nd', v= util.A)
             return False
         
         if not _list: _list= []
         
-        log('Starting to add device to table', proc= 'device_db.add_device_nd',
-            v= util.N)
+        log('Starting to add device to table', proc= 'device_db.add_device_nd', v= util.N)
         
         # If a single device was passed, add it for group processing
         if _device: _list.append(_device)
         
-        
         # Process each device
         for _device in _list:
             
+            # Add the device into the database
             self.cur.execute('''
                 INSERT INTO Devices (
                     name,

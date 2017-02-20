@@ -1,6 +1,6 @@
 import re
 import util
-from global_vars import DELAY_INCREASE
+from gvars import DELAY_INCREASE
 from time import sleep
 from util import parse_ip, log
 
@@ -145,7 +145,7 @@ def parse_neighbor(cdp_input):
     output = {
         'name': '',
         'ip': '',
-        'management_ip': '',
+        'connect_ip': '',
         'netmiko_platform': '',
         'system_platform': '',
         'source_interface': '',
@@ -157,7 +157,7 @@ def parse_neighbor(cdp_input):
     # Get each IP address
     ip = parse_ip(cdp_input)
     if ip and len(ip) > 0: output['ip'] = ip[0]
-    if ip and len(ip) > 1: output['management_ip'] = ip[1]
+    if ip and len(ip) > 1: output['connect_ip'] = ip[1]
     
     output['name'] = parse_system_name(cdp_input) 
     output['netmiko_platform'] = parse_netmiko_platform(cdp_input)
