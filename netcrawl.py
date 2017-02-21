@@ -1,6 +1,8 @@
-from util import log
 from gvars import MAIN_DB_PATH, RUN_PATH, DEVICE_DB_PATH
-import sys, argparse, textwrap, os, util, io_sql
+from ssh_dispatcher import ConnectHandler
+from util import log
+
+import sys, argparse, textwrap, os, util, io_sql, gvars
     
 
 def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
@@ -36,19 +38,14 @@ def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
         # Poll the device
         try: device.process_device()
         except Exception as e:
-            device.failed = True
-            device.failed_msg = 'process_device to {} failed: {}'.format(device.ip, str(e))
+            device.alert('Connection to {} failed: {}'.format(device.ip, str(e)), proc= 'main.normal_run')
         
         # Record the device as being processed and save it
         nlist.set_processed(device.device_id)
         vlist.add_device_nd(device)
         dlist.add_device_nd(device)
         
-        if device.failed:
-            # Add the device to the list of visited devices
-            log(msg= 'Failed connection to {} due to: {}'.format(device.ip, device.failed_msg), 
-                ip= device.ip, proc= 'main.normal_run', v= util.C)
-            continue
+        if device.failed: continue
 
         else:
             log('Successfully processed {}'.format(device.device_name), 
@@ -69,19 +66,19 @@ def single_run(ip, platform):
     device = ConnectHandler(ip= ip, netmiko_platform= platform)
     
     # Process the device
+    
     try: device.process_device()
     except Exception as e:
-        device.failed = True
-        device.failed_msg = 'process_device to {} failed: {}'.format(device.ip, str(e))
-
+        device.alert(msg= 'Connection to {} failed: {}'.format(device.ip, str(e)), proc= 'main.single_run')
+        if not gvars.SUPPRESS_ERRORS: raise
+        
     # Save the device
     dlist = io_sql.device_db(DEVICE_DB_PATH)
     dlist.add_device_nd(device)
     dlist.db.close()
     
-    if device.failed:
-        log(msg= 'Failed connection due to: {}'.format(device.failed_msg), 
-            ip= device.ip, proc= 'main.normal_run', v= util.C)
+    if device.failed: 
+        print('Connection failed.')
         return False
     
     else:

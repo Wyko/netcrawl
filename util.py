@@ -41,18 +41,19 @@ def getCreds():
 
 
 def parse_ip(raw_input):
-    """Returns each IP address matched in the input string."""
+    """Returns a list of strings containing each IP address 
+    matched in the input string."""
     return re.findall(r'''
-        \b                # Start at a word boundry
+        \b                        # Start at a word boundry
         (?:
-        (?:
-        25[0-5]|          # Match 250-255
-        2[0-4][0-9]|      # Match 200-249
-        [01]?[0-9][0-9]?  # Match 0-199
-        )
-        (?:\.|\b)         # Followed by a . or a word boundry
-        ){4}              # Repeat that four times
-        \b                # End at a word boundry
+            (?:
+                25[0-5]|          # Match 250-255
+                2[0-4][0-9]|      # Match 200-249
+                [01]?[0-9][0-9]?  # Match 0-199
+            )
+            (?:\.|\b)             # Followed by a . or a word boundry
+        ){4}                      # Repeat that four times
+        \b                        # End at a word boundry
         ''', raw_input, re.X)
 
 

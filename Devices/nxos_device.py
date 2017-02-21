@@ -5,39 +5,68 @@ Created on Feb 18, 2017
 '''
 
 from util import log
-from datetime import datetime
-from gvars import DEVICE_PATH, TIME_FORMAT_FILE
-from time import sleep
-import re, hashlib, util, os
-import gvars
+import re, util
 from Devices.base_device import interface
 from Devices.cisco_device import cisco_device
 
 class nxos_device(cisco_device):
-    '''
-    classdocs
-    '''
-
     
-    def get_mac_address_table(self):
-        pass
+    def get_mac_address_table(self, attempts= 3):
+        '''Populates self.mac_address_table from the remote device.
+        
+        Returns:
+            Boolean: True if the command was successful
+            
+        Raises:
+            Exception: ValueError if no result was found.
+        '''
+        
+        for i in range(attempts):
+            output= self.ssh_connection.send_command_expect('show mac address-table')
+            
+            # Check if something that looks like a MAC was returned
+            if bool(re.search(r'(?:[0-9A-F]{2,4}[\:\-\.]){2,7}[0-9A-F]{2,4}', output)):
+                self.raw_mac_address_table = output
+                log('Attempt {}: Got valid output.'.format(
+                    str(i+1)), self.ip, proc= 'get_mac_address_table', v= util.N)
+                
+                # Parse the table
+                self.parse_mac_address_table()                
+                return True
+            
+            # Otherwise, continue the loop or break out
+            elif i+1 >= attempts:
+                log('Attempt Final {}: No valid output. Got[:20]: {}'.format(
+                    str(i+1), output), self.ip, proc= 'get_mac_address_table', v= util.C)
+                raise ValueError('get_mac_address_table: Attempt Final {}: ' +
+                    'No valid output. Got[:20]: {}'.format(i, output))
+            else:
+                log('Attempt {}: No valid output. Got[:20]: {}'.format(
+                    str(i+1), output), self.ip, proc= 'get_mac_address_table', v= util.D)
+                continue
+                
         
     
-    def parse_mac_address_table(self, raw_address_table):
+    def parse_mac_address_table(self):
+        if not self.raw_mac_address_table:
+            self.alert('Parse function called without having raw data.', 
+                       proc= 'nxos_device.parse_mac_address_table')
+            return False
+        
         output= re.finditer(              # #### NX-OS MAC Regex ####
-            '''            
-            (?<MAC>              # Name of MAC capture group
+            r'''            
+            (?P<mac>             # MAC capture group
             (?:[0-9A-F]{2,4}[\:\-\.]){2,7}[0-9A-F]{2,4}
-            )                    # End of MAC Address
+            )                    
             .*?                  # Skip all characters up to the interface
-            (?<Interface>        # Name of the interface capture group
+            (?P<interface>      # Interface capture group
             [A-Z0-9\/]+    
-            )                    # End of the Interface
+            )
             $                    # Match if interface is at the end of the line
-            ''', (re.X | re.I | re.M) )
+            ''', self.raw_mac_address_table, (re.X | re.I | re.M) )
         
-        self.mac_address_table = output
-        
+        # Return a dictionary containing the MAC's and interfaces
+        self.mac_address_table= [m.groupdict() for m in output]
         
     def get_interfaces(self):
         

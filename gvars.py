@@ -14,6 +14,9 @@ DELAY_INCREASE = 0.3
 # The delay factor s
 BASE_DELAY = 1
 
+# Set to false to get full tracebacks
+SUPPRESS_ERRORS = False
+
 
 RUN_PATH = current_file_dir + '/runtime/' 
 MAIN_DB_PATH = RUN_PATH + 'main.db'

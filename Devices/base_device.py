@@ -38,29 +38,33 @@ class interface():
 class network_device():
     '''Generic network device'''
     def __init__(self, **kwargs):
+        # Immutable arguments
+        self.raw_mac_address_table= kwargs.pop('raw_mac_address_table', None)
         self.netmiko_platform= kwargs.pop('netmiko_platform', None)
         self.system_platform= kwargs.pop('system_platform', None)
         self.ssh_connection= kwargs.pop('ssh_connection', None)
         self.neighbor_id= kwargs.pop('neighbor_id', None)        
         self.device_name= kwargs.pop('device_name', None)
         self.credentials= kwargs.pop('credentials', None)
-        self.failed_msg= kwargs.pop('failed_msg', None)
-        self.ip= kwargs.pop('ip', None)
         self.AD_enabled= kwargs.pop('AD_enabled', None)
-        self.accessible= kwargs.pop('accessible', None)
-        self.device_id= kwargs.pop('id', None)
         self.software= kwargs.pop('software', None)
         self.raw_cdp= kwargs.pop('raw_cdp', None)
-        self.failed= kwargs.pop('failed', None)
         self.config= kwargs.pop('config', None)
         self.TCP_22= kwargs.pop('TCP_22', None)
         self.TCP_23= kwargs.pop('TCP_23', None)
+        self.device_id= kwargs.pop('id', None)
+        self.ip= kwargs.pop('ip', None)
         
         # Mutable arguments
         self.serial_numbers= []
         self.interfaces = []
         self.neighbors = []
         self.other_ips= []
+        self.mac_address_table= []
+        
+        # Other Args
+        self.failed = False
+        self.failed_msg = ''
         
 
     def __str__(self):
@@ -75,24 +79,33 @@ class network_device():
             'Config Size:     ' + str(len(self.config))
             ])
     
+    def alert(self, msg, proc):
+        '''Populates the failed messages variable for the device'''
+        self.failed = True
+        self.failed_msg += proc + ': ' + msg + ' | '
+        log(msg= msg, proc= proc, v= util.A)
+    
+    
     def get_serials(self):
-        raise ValueError('get_serials: No inherited method replaced this method.')
-    
+        self.alert('No inherited method replaced this method.', 'base_device.get_serials')
+        
     def get_config(self):
-        raise ValueError('get_config: No inherited method replaced this method.')
-    
+        self.alert('No inherited method replaced this method.', 'base_device.get_config')
+                
     def parse_hostname(self):
-        raise ValueError('parse_hostname: No inherited method replaced this method.')
-    
+        self.alert('No inherited method replaced this method.', 'base_device.parse_hostname')
+                
     def get_cdp_neighbors(self):
-        raise ValueError('get_cdp_neighbors: No inherited method replaced this method.')
-    
+        self.alert('No inherited method replaced this method.', 'base_device.get_cdp_neighbors')
+            
     def get_interfaces(self):
-        raise ValueError('get_interfaces: No inherited method replaced this method.')
-    
+        self.alert('No inherited method replaced this method.', 'base_device.get_interfaces')
+            
     def get_other_ips(self):
-        raise ValueError('get_other_ips: No inherited method replaced this method.')
-    
+        self.alert('No inherited method replaced this method.', 'base_device.get_other_ips')
+        
+    def get_mac_address_table(self):
+        self.alert('No inherited method replaced this method.', 'base_device.get_mac_address_table')       
     
     
     def add_ip(self, ip):
@@ -149,7 +162,7 @@ class network_device():
         # Populate the table
         for n in self.neighbors:
             entry = '-- '
-            if sh_name: entry += '{name:30.29}, '.format(name = n['name'])
+            if sh_name: entry += '{name:30.29}, '.format(name = n['device_name'])
             if sh_ip: entry += '{ip:15}, '.format(ip = n['ip'])
             if sh_src: entry += '{src:25}, '.format(src = n['source_interface'])
             if sh_platform: entry += '{platform}'.format(platform = n['system_platform'])
@@ -272,26 +285,26 @@ class network_device():
         '''Main method which fully populates the network_device'''
        
         self.start_cli_session()
-
         self.enable()
-        
-        self.get_serials()
-        
-        self.get_config()
-        
-        self.parse_hostname()
-        
-        self.get_cdp_neighbors()
-        
-        self.get_interfaces()
-         
-        self.get_other_ips()
-        
-        self.ssh_connection.disconnect()
-        
-        self.failed = False
+       
+        for fn in (
+            self.get_serials(),
+            self.get_config(),
+            self.parse_hostname(),
+            self.get_cdp_neighbors(),
+            self.get_interfaces(),
+            self.get_other_ips(),
+            self.get_mac_address_table()
+            ):
+            try: 
+                fn
+            except Exception as e:
+                self.alert('Error: ' + str(e), 'main.process_device')
+                if not gvars.SUPPRESS_ERRORS: raise
+               
         
         log('Finished getting {}'.format(self.unique_name()), proc='process_device', v= util.H)
+        self.ssh_connection.disconnect()
         return True
     
     
@@ -318,7 +331,6 @@ class network_device():
         
         self.ssh_connection= None
         self.credentials= None
-        self.accessible= False
         self.failed= True
         self.TCP_22= port_is_open(22, self.ip)
         self.TCP_23= port_is_open(23, self.ip)

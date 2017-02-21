@@ -77,7 +77,7 @@ class neighbor_db(sql_writer):
                     working= 0
             ''')
         else:
-            # Otherwise, just reset the working tag
+            # Otherwise, reset the working and pending tag
             self.cur.execute('''
                 UPDATE Neighbor 
                 SET
@@ -499,8 +499,9 @@ class device_db(sql_writer):
                     failed_msg,
                     TCP_22,
                     TCP_23,
-                    AD_enabled,
-                    credentials,
+                    username,
+                    password,
+                    cred_type,
                     updated
                     )
                 VALUES (
@@ -516,8 +517,9 @@ class device_db(sql_writer):
                     :failed_msg,
                     :TCP_22,
                     :TCP_23,
-                    :AD_enabled,
-                    :credentials,
+                    :username,
+                    :password,
+                    :cred_type,
                     :updated
                     );''',
                 {
@@ -532,8 +534,9 @@ class device_db(sql_writer):
                     'failed_msg': _device.failed_msg,
                     'TCP_22': _device.TCP_22,
                     'TCP_23': _device.TCP_23,
-                    'AD_enabled': _device.AD_enabled,
-                    'credentials': str(_device.credentials),
+                    'username': _device.credentials['user'],
+                    'password': _device.credentials['password'][:2],
+                    'cred_type': _device.credentials['type'],
                     'updated': datetime.now().strftime(TIME_FORMAT)
                     
                 })
@@ -675,8 +678,9 @@ class device_db(sql_writer):
                 failed_msg         TEXT,
                 TCP_22             BOOLEAN,
                 TCP_23             BOOLEAN,
-                AD_enabled         BOOLEAN,
-                credentials        TEXT,
+                username           TEXT,
+                password           TEXT,
+                cred_type          TEXT,
                 updated            TEXT
             );
             

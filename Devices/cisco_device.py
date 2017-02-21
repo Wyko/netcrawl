@@ -66,7 +66,7 @@ class cisco_device(network_device):
                 if i < limit: continue
                 else:
                     raise ValueError('''get_serials: Show inventory attempt \
-    finally failed on attempt {} with error: {}.'''.format(str(i+1), str(e))) 
+finally failed on attempt {} with error: {}.'''.format(str(i+1), str(e))) 
         
             # Get each serial number
             output = re.findall(r'^Name.*?["](.+?)["][\s\S]*?Desc.*?["](.+?)["][\s\S]*?SN:[ ]?(\w+)', raw_output, re.MULTILINE | re.IGNORECASE)
@@ -74,15 +74,15 @@ class cisco_device(network_device):
             # See if valid results were produced.
             if not (output and output[0]):
                 log('''Failed to get serials on attempt {}. Re.Findall produced no \
-    results. Raw_output[:20] was: {}'''.format(str(i+1), raw_output[:20]), 
+results. Raw_output[:20] was: {}'''.format(str(i+1), raw_output[:20]), 
                     ip= self.ssh_connection.ip, proc= 'get_serials', v= util.A)
                 
                 # Continue if we haven't tried enough times yet, otherwise error out
                 if i < limit: continue
                 else:
                     raise ValueError('''get_serials: Finally failed to get serials \
-    on attempt {}. Re.Findall produced no results. \
-    Raw_output was: {}'''.format(str(i+1), raw_output))
+on attempt {}. Re.Findall produced no results. \
+Raw_output was: {}'''.format(str(i+1), raw_output))
                 
                 
         # Add the found serials to the parent device        
