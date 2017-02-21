@@ -5,22 +5,22 @@ from time import sleep
 from netmiko import ConnectHandler, NetMikoAuthenticationException
 from netmiko import NetMikoTimeoutException
 
-import re, hashlib, util, os, cdp, gvars
+import re, hashlib, util, os, gvars
 
 class interface():
     '''Generic network device interface'''
     def __init__(self):
         
-        self.interface_name=''
-        self.interface_ip=''
-        self.interface_subnet=''
-        self.interface_description=''
-        self.interface_status=''
-        self.tunnel_destination_ip=''
-        self.remote_interface=''
-        self.tunnel_status=''
-        self.interface_type=''
-        self.virtual_ip= ''
+        self.interface_name= None
+        self.interface_ip= None
+        self.interface_subnet= None
+        self.interface_description= None
+        self.interface_status= None
+        self.tunnel_destination_ip= None
+        self.remote_interface= None
+        self.tunnel_status= None
+        self.interface_type= None
+        self.virtual_ip= None
     
     
     def type(self):
@@ -30,44 +30,44 @@ class interface():
     def __str__(self):
             
         output = []
-        for var, value in gvars(self).items(): output.append(var + ': ' + str(value))
+        for var, value in vars(self).items(): output.append(var + ': ' + str(value))
         return '\n'.join(str(x) for x in sorted(output))
     
 
 
 class network_device():
     '''Generic network device'''
-    def __init__(self,
-                 name= None,
-                 ip= None,
-                 netmiko_platform= None):
+    def __init__(self, **kwargs):
+        self.netmiko_platform= kwargs.pop('netmiko_platform', None)
+        self.system_platform= kwargs.pop('system_platform', None)
+        self.ssh_connection= kwargs.pop('ssh_connection', None)
+        self.neighbor_id= kwargs.pop('neighbor_id', None)        
+        self.device_name= kwargs.pop('device_name', None)
+        self.credentials= kwargs.pop('credentials', None)
+        self.failed_msg= kwargs.pop('failed_msg', None)
+        self.ip= kwargs.pop('ip', None)
+        self.AD_enabled= kwargs.pop('AD_enabled', None)
+        self.accessible= kwargs.pop('accessible', None)
+        self.device_id= kwargs.pop('id', None)
+        self.software= kwargs.pop('software', None)
+        self.raw_cdp= kwargs.pop('raw_cdp', None)
+        self.failed= kwargs.pop('failed', None)
+        self.config= kwargs.pop('config', None)
+        self.TCP_22= kwargs.pop('TCP_22', None)
+        self.TCP_23= kwargs.pop('TCP_23', None)
         
-        self.failed= True
-        self.ssh_connection = None
-        self.failed_msg= None
-        self.device_name = name
+        # Mutable arguments
+        self.serial_numbers= []
         self.interfaces = []
         self.neighbors = []
-        self.config = None
-        self.connect_ip = ip
-        self.serial_numbers = []
-        self.other_ips=[]
-        self.netmiko_platform= netmiko_platform
-        self.system_platform= None
-        self.raw_cdp= None
-        self.TCP_22= False
-        self.TCP_23= False
-        self.AD_enabled= None
-        self.accessible= False
-        self.cred= None
-        self.software= None
-    
-                
+        self.other_ips= []
+        
+
     def __str__(self):
         return '\n'.join([
             'Device Name:     ' + str(self.device_name),
             'Unique Name:     ' + str(self.unique_name()),
-            'Management IP:   ' + str(self.connect_ip),
+            'Management IP:   ' + str(self.ip),
             'First Serial:    ' + str(self.serial_numbers[0]),
             'Serial Count:    ' + str(len(self.serial_numbers)),
             'Interface Count: ' + str(len(self.interfaces)),
@@ -216,11 +216,10 @@ class network_device():
             return None
         
         if name and self.device_name: 
-            if len(self.device_name) > 16:
-                output.append(self.device_name[-16:])
-            else:
-                output.append(self.device_name)
-        else: return None
+#             if len(self.device_name) > 16:
+#                 output.append(self.device_name[-16:])
+#             else:
+            output.append(self.device_name)
         
         # Make a hash of the serials        
         if serials and len(self.serial_numbers) > 0:
@@ -255,7 +254,7 @@ class network_device():
                 
                 # At the final try, return the failed device.
                 if i >= attempts-1: 
-                    return False
+                    raise ValueError('Enable failed after {} attempts'.format(i))
                 
                 # Otherwise rest for one second longer each time and then try again
                 self.ssh_connection.global_delay_factor += gvars.DELAY_INCREASE
@@ -282,12 +281,8 @@ class network_device():
         
         self.parse_hostname()
         
-        try: self.neighbors, self.raw_cdp = cdp.get_cdp_neighbors(self.ssh_connection)
-        except Exception as e:
-            log('Exception occurred getting neighbor info: {}'.format(str(e)), proc='get_device', v= util.C)
-            self.failed_msg= 'get_device: Failed to get neighbor info. Error: ' + str(e)
-            return False
-            
+        self.get_cdp_neighbors()
+        
         self.get_interfaces()
          
         self.get_other_ips()
@@ -306,7 +301,7 @@ class network_device():
         SSH first, and if it fails it will try a terminal session.
         
         Optional Args: 
-            global_delay_factor (float): A number by which timeouts are multself.connect_iplied
+            global_delay_factor (float): A number by which timeouts are multiplied
         
         Returns: 
             Dict: 
@@ -316,19 +311,21 @@ class network_device():
                 'cred': The first successful credential dict 
         """
         
-        log('Connecting to %s device %s' % (self.netmiko_platform, self.connect_ip), self.connect_ip, proc='start_cli_session', v= util.N)
+        log('Connecting to %s device %s' % (self.netmiko_platform, self.ip), self.ip, proc='start_cli_session', v= util.N)
         
         # Get the username and password
         credList = getCreds()
         
         self.ssh_connection= None
-        self.cred= None
-        self.TCP_22= port_is_open(22, self.connect_ip)
-        self.TCP_23= port_is_open(23, self.connect_ip)
+        self.credentials= None
+        self.accessible= False
+        self.failed= True
+        self.TCP_22= port_is_open(22, self.ip)
+        self.TCP_23= port_is_open(23, self.ip)
         
         # Check to see if SSH (port 22) is open
         if not self.TCP_22:
-            log('Port 22 is closed on %s' % self.connect_ip, self.connect_ip, proc='start_cli_session', v= util.A)
+            log('Port 22 is closed on %s' % self.ip, self.ip, proc='start_cli_session', v= util.A)
         else: 
             # Try logging in with each credential we have
             for cred in credList:
@@ -336,58 +333,57 @@ class network_device():
                     # Establish a connection to the device
                     ssh_connection = ConnectHandler(
                         device_type=self.netmiko_platform,
-                        ip=  self.connect_ip,
+                        ip=  self.ip,
                         username= cred['user'],
                         password= cred['password'],
                         secret= cred['password'],
                         global_delay_factor= global_delay_factor
                     )
-                    log('Successful ssh auth to %s using %s, %s' % (self.connect_ip, cred['user'], cred['password'][:2]), proc='start_cli_session', v= util.N)
+                    log('Successful ssh auth to %s using %s, %s' % (self.ip, cred['user'], cred['password'][:2]), proc='start_cli_session', v= util.N)
                     
                     self.credentials = cred
                     self.ssh_connection= ssh_connection
-                    self.accessible= True
+                    self.failed= False
                     return True
         
                 except NetMikoAuthenticationException:
-                    log ('SSH auth error to %s using %s, %s' % (self.connect_ip, cred['user'], cred['password'][:2]), proc='start_cli_session', v= util.A)
+                    log ('SSH auth error to %s using %s, %s' % (self.ip, cred['user'], cred['password'][:2]), proc='start_cli_session', v= util.A)
                     continue
                 except NetMikoTimeoutException:
-                    log('SSH to %s timed out.' % self.connect_ip, proc='start_cli_session', v= util.A)
+                    log('SSH to %s timed out.' % self.ip, proc='start_cli_session', v= util.A)
                     # If the device is unavailable, don't try any other credentials
                     break
         
         # Check to see if port 23 (telnet) is open
         if not self.TCP_23:
-            log('Port 23 is closed on %s' % self.connect_ip, self.connect_ip, proc='start_cli_session', v= util.A)
+            log('Port 23 is closed on %s' % self.ip, self.ip, proc='start_cli_session', v= util.A)
         else:
             for cred in credList:
                 try:
                     # Establish a connection to the device using telnet
                     ssh_connection = ConnectHandler(
                         device_type=self.netmiko_platform + '_telnet',
-                        ip= self.connect_ip,
+                        ip= self.ip,
                         username=cred['user'],
                         password=cred['password'],
                         secret=cred['password']
                     )
-                    log('Successful telnet auth to %s using %s, %s' % (self.connect_ip, cred['user'], cred['password'][:2]), proc='start_cli_session', v= util.N)
+                    log('Successful telnet auth to %s using %s, %s' % (self.ip, cred['user'], cred['password'][:2]), proc='start_cli_session', v= util.N)
                     
                     self.credentials = cred
                     self.ssh_connection= ssh_connection
-                    self.accessible= True
+                    self.failed= False
                     return True
                 
                 except NetMikoAuthenticationException:
                     log('Telnet auth error to %s using %s, %s' % 
-                        (self.connect_ip, cred['user'], cred['password'][:2]), v= util.A, proc= 'start_cli_session')
+                        (self.ip, cred['user'], cred['password'][:2]), v= util.A, proc= 'start_cli_session')
                     continue
                 except:
-                    log('Telnet to %s timed out.' % self.connect_ip, proc='start_cli_session', v= util.A)
+                    log('Telnet to %s timed out.' % self.ip, proc='start_cli_session', v= util.A)
                     # If the device is unavailable, don't try any other credentials
                     break
         
-        self.accessible= False
         raise ValueError('No CLI connection could be established')
         
             

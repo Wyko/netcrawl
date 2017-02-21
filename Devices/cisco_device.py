@@ -4,11 +4,9 @@ Created on Feb 19, 2017
 @author: Wyko
 '''
 
-from util import log
-from datetime import datetime
-from gvars import DEVICE_PATH, TIME_FORMAT_FILE
+from util import log, parse_ip
 from time import sleep
-import re, hashlib, util, os
+import re, util
 import gvars
 from Devices.base_device import network_device
 
@@ -23,12 +21,14 @@ class cisco_device(network_device):
         output = re.search('^hostname (.+)\n', self.config, re.MULTILINE)
         if output and output.group(1): 
             log('Regex parsing the config found {}'.format(output.group(1)), proc='parse_hostname', v= util.N)
-            return output.group(1)
+            self.device_name= output.group(1)
+            return True
+        
         else: log('Regex parsing failed, trying prompt parsing.', proc='parse_hostname', v= util.N)
         
         if not self.ssh_connection: 
             log('No self.ssh_connection object passed, function failed', proc= 'parse_hostname', v= util.C)
-            return None
+            raise ValueError('parse_hostname: No ssh_connection object passed')
         
         # If the hostname couldn't be parsed, get it from the prompt    
         for i in range(attempts):
@@ -44,12 +44,14 @@ class cisco_device(network_device):
                         
             if '#' in output: 
                 log('Prompt parsing found ' + output, proc='parse_hostname', v= util.N)
-                return output.split('#')[0]
+                self.device_name= output.split('#')[0]
+                return True
+            
             else: sleep(2 + 1)
         
         # Last case scenario, return nothing
         log('Failed. No hostname found.', proc= 'parse_hostname', v= util.C)
-        return None
+        raise ValueError('parse_hostname failed. No hostname found.')
 
 
     def get_serials(self):
@@ -93,6 +95,7 @@ class cisco_device(network_device):
                 })
         log('Finished. Got {} serials.'.format(len(serials)), proc= 'get_serials', v= util.N)
         self.serial_numbers.extend(serials)
+        return True
         
         
     def get_config(self, attempts=5):
@@ -131,3 +134,152 @@ class cisco_device(network_device):
         output = re.findall(r'(?:glbp|hsrp|standby).*?(\d{1,3}(?:\.\d{1,3}){3})', self.config, re.I)
         log('{} non-standard (virtual) ips found on the device'.format(len(output)), proc= 'get_other_ips', v= util.D)
         self.other_ips.extend(output)
+        
+    
+    def get_cdp_neighbors(self, attempts= 3):
+    
+        for i in range(attempts):
+            
+            # Get the CDP neighbors for the device 
+            try: raw_cdp = self.get_raw_cdp_output()
+            except:
+                log('No CDP output retrieved from %s' % self.ssh_connection.ip, proc='get_cdp_neighbors', v= util.C)
+                if i >= attempts: raise ValueError('get_cdp_neighbors: No CDP output retrieved from %s' % self.ssh_connection.ip)
+            else:
+                
+                # Check if we got actual output    
+                if not raw_cdp: 
+                    log('Attempt {}: Command successful but no CDP output retrieved from {}'.format(str(i), self.ssh_connection.ip), proc='get_cdp_neighbors', v= util.C)
+                    if i >= attempts: raise ValueError('get_cdp_neighbors: Command successful but no CDP output retrieved from %s' % self.ssh_connection.ip)
+                    continue
+                
+                # Check whether CDP is enabled at all
+                if re.search(r'not enabled', raw_cdp, re.I): 
+                    log('CDP not enabled on %s' % self.ssh_connection.ip, proc='get_cdp_neighbors', v= util.C)
+                    raise ValueError('get_cdp_neighbors: CDP not enabled on %s' % self.ssh_connection.ip)
+                
+                # Split the full 'sh cdp [...]' output into non-empty individual neighbors
+                cdp_output= list(filter(None, re.split(r'-{4,}', raw_cdp)))
+                
+                # Parse each neighbor's CDP data
+                cdp_neighbor_list = []
+                for entry in cdp_output:
+                    try: cdp_neighbor = self.parse_neighbor(entry)
+                    except: continue
+                    else:
+                        if cdp_neighbor: cdp_neighbor_list.append(cdp_neighbor)
+                
+                # If no neighbors were found, try again
+                if not len(cdp_neighbor_list) > 0:
+                    log('Attempt {}: No CDP neighbors found. raw_cdp[20] was: {}'.format(
+                        str(i+1), raw_cdp[:20]), proc='get_cdp_neighbors', v= util.A)
+                    if i >= attempts: raise ValueError('get_cdp_neighbors: Command successful but no CDP output retrieved from %s' % self.ssh_connection.ip)
+                    continue
+                else:
+                    log('{} CDP neighbors found from {}.'.format(len(cdp_neighbor_list), self.ssh_connection.ip), proc='get_cdp_neighbors', v= util.NORMAL)
+                    
+                self.neighbors= cdp_neighbor_list
+                self.raw_cdp = raw_cdp
+                return True
+
+
+    def get_raw_cdp_output(self, attempts= 3):
+        """Get the CDP neighbor detail from the given device using SSH
+        
+        Returns:
+            String: The raw CDP output.
+        """
+        
+        log('Starting, device %s' % self.ssh_connection.ip, proc='get_raw_cdp_output', v= util.N)
+        
+        # Show cdp neighbor detail
+        for i in range(attempts):
+            try: result = self.ssh_connection.send_command_expect("show cdp neighbor detail")
+            except Exception as e:
+                log('Sh cdp n det failed on attempt %s. Current delay: %s' % 
+                    (str(i+1), self.ssh_connection.global_delay_factor), 
+                    ip= self.ssh_connection.ip, proc= 'get_raw_cdp_output', v= util.A,
+                    error= e)
+                
+                self.ssh_connection.global_delay_factor += gvars.DELAY_INCREASE
+                sleep(1)
+                continue
+            else: 
+                log('Sh cdp n det produced output on attempt {}'.format
+                    (str(i+1), self.ssh_connection.global_delay_factor), 
+                    self.ssh_connection.ip, proc='get_raw_cdp_output', v= util.NORMAL)
+                break
+     
+        # Split the raw output by the common '---' separator and return a list of 
+        # CDP entries
+        if result: return result
+        else: return None
+    
+        
+    def parse_netmiko_platform(self, cdp_input):
+        blacklist = [
+            'AIR',
+            'IP Phone'
+            ]
+        
+        ios_strings = [
+            'Internetwork Operating System Software',
+            'IOS Software',
+            'IOS (tm)'
+            ]
+        
+        if any(ext in cdp_input for ext in blacklist):
+            return ''
+        elif 'NX-OS' in cdp_input: 
+            return "cisco_nxos"
+        elif any(ext in cdp_input for ext in ios_strings): 
+            return "cisco_ios"
+        else: return None
+    
+    
+    def parse_neighbor(self, cdp_input):
+        '''Accepts a single CDP neighbor entry and parses it into
+        a dictionary.
+        '''
+        
+        output = {
+            'device_name': None,
+            'netmiko_platform': None,
+            'system_platform': None,
+            'source_interface': None,
+            'neighbor_interface': None,
+            'software': None,
+            'raw_cdp': cdp_input,
+            'ip': None,
+            'other_ips': []
+            }
+        
+        # Get each IP address
+        ip_list = parse_ip(cdp_input)
+        
+        for i, ip in enumerate(ip_list):
+            if i==0: output['ip'] = ip
+            else: output['other_ips'].append(ip)
+        
+        output['netmiko_platform'] = self.parse_netmiko_platform(cdp_input)
+        
+        # Parse the system platform
+        system_platform = re.search(r'Platform: ?(.+?),', cdp_input, flags=re.I)
+        if system_platform: output['system_platform'] = system_platform.group(1)
+        
+        # Parse the source interface
+        source_interface = re.search(r'^interface:[ ]?(.*?)[,\n]', cdp_input, flags=(re.I|re.M))
+        if source_interface: output['source_interface']= source_interface.group(1)
+    
+        # Parse the neighbor interface
+        neighbor_interface = re.search(r'^interface:.*?:[ ](.*?)[,\n ]', cdp_input, flags=(re.I|re.M))
+        if neighbor_interface: output['neighbor_interface']= neighbor_interface.group(1)
+        
+        # Get the device name
+        device_name = re.findall(r'(?:System Name|Device ID): ?(.*?)(?:\(|\n)', cdp_input, flags=re.I)
+        if len(device_name)>1: output['device_name'] = device_name[1] # Returns the more readable Device name if present
+        elif output: output['device_name'] = device_name[0] # Returns the device ID otherwise
+        if "." in output['device_name']: output['device_name'] = output['device_name'].split(".")[0]
+        
+        return output
+

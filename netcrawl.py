@@ -1,7 +1,6 @@
 from util import log
 from gvars import MAIN_DB_PATH, RUN_PATH, DEVICE_DB_PATH
 import sys, argparse, textwrap, os, util, io_sql
-from ssh_dispatcher import ConnectHandler
     
 
 def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
@@ -19,41 +18,36 @@ def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
     while nlist.count_pending() > 0:
         
         # Get the next device from the pending list
-        device_d = nlist.get_next()
-        if not device_d:
+        device = nlist.get_next()
+        if not device:
             log('No device returned.', proc= 'main.normal_run', v= util.C)
             break
         
         # Skip devices which have already been processed
-        if vlist.ip_exists(device_d['ip']): 
-            log('- Device {1} at {0} has already been processed. Skipping.'.format(device_d['ip'],device_d['name']), proc='normal_run', v= util.N)
-            nlist.set_processed(device_d['id'])
+        if vlist.ip_exists(device.ip): 
+            log('- Device {1} at {0} has already been processed. Skipping.'.format(device.ip, device.device_name), proc='normal_run', v= util.N)
+            nlist.set_processed(device.device_id)
             continue
 
         log('---- Processing {name} at {ip} || {pending} devices pending ----'.format(
-            ip= device_d['ip'], name= device_d['name'], pending= nlist.count_pending()), 
+            ip= device.ip, name= device.device_name, pending= nlist.count_pending()), 
             proc='main.normal_run', v= util.H)
-        
-        # Create the network device
-        device = ConnectHandler(device_d['ip'], 
-                                device_d['netmiko_platform'],
-                                name = device_d['name'])
         
         # Poll the device
         try: device.process_device()
         except Exception as e:
             device.failed = True
-            device.failed_msg = 'process_device to {} failed: {}'.format(device_d['ip'], str(e))
+            device.failed_msg = 'process_device to {} failed: {}'.format(device.ip, str(e))
         
         # Record the device as being processed and save it
-        nlist.set_processed(device_d['id'])
+        nlist.set_processed(device.device_id)
         vlist.add_device_nd(device)
         dlist.add_device_nd(device)
         
         if device.failed:
             # Add the device to the list of visited devices
-            log(msg= 'Failed connection to {} due to: {}'.format(device_d['ip'], device.failed_msg), 
-                ip= device_d['ip'], proc= 'main.normal_run', v= util.C)
+            log(msg= 'Failed connection to {} due to: {}'.format(device.ip, device.failed_msg), 
+                ip= device.ip, proc= 'main.normal_run', v= util.C)
             continue
 
         else:
@@ -78,7 +72,7 @@ def single_run(ip, platform):
     try: device.process_device()
     except Exception as e:
         device.failed = True
-        device.failed_msg = 'process_device to {} failed: {}'.format(device.connect_ip, str(e))
+        device.failed_msg = 'process_device to {} failed: {}'.format(device.ip, str(e))
 
     # Save the device
     dlist = io_sql.device_db(DEVICE_DB_PATH)
@@ -87,7 +81,7 @@ def single_run(ip, platform):
     
     if device.failed:
         log(msg= 'Failed connection due to: {}'.format(device.failed_msg), 
-            ip= device.connect_ip, proc= 'main.normal_run', v= util.C)
+            ip= device.ip, proc= 'main.normal_run', v= util.C)
         return False
     
     else:
@@ -147,7 +141,8 @@ This package will process a specified host and pull information from it. If desi
         dest= 'resume',
         help= 'Resume the last scan, if one was interrupted midway. Omitting '+
             'this argument is not the same as using -c; Previous database '+
-            'entries are maintained. Scan starts with the seed device.',
+            'entries are maintained. Scan starts with the seed device. All '+
+            'neighbor entries marked pending are reset.',
         default = False
         )
     

@@ -1,4 +1,7 @@
-"""Controls selection of proper class based on the device type."""
+"""Controls selection of proper class based on the device type.
+
+Credit: Kirk Byers
+"""
 from Devices.ios_device import ios_device
 from Devices.nxos_device import nxos_device
 

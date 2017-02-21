@@ -41,10 +41,19 @@ def getCreds():
 
 
 def parse_ip(raw_input):
-    """Returns the first IP address matched in the input string. None if 
-    nothing matched.
-    """
-    return re.findall(r"(1[0-9]{1,3}(?:\.\d{1,3}){3})", raw_input)
+    """Returns each IP address matched in the input string."""
+    return re.findall(r'''
+        \b                # Start at a word boundry
+        (?:
+        (?:
+        25[0-5]|          # Match 250-255
+        2[0-4][0-9]|      # Match 200-249
+        [01]?[0-9][0-9]?  # Match 0-199
+        )
+        (?:\.|\b)         # Followed by a . or a word boundry
+        ){4}              # Repeat that four times
+        \b                # End at a word boundry
+        ''', raw_input, re.X)
 
 
 def is_ip(raw_input):

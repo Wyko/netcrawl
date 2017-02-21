@@ -6,17 +6,10 @@ Created on Feb 19, 2017
 
 from Devices.cisco_device import cisco_device
 from util import log
-from datetime import datetime
-from gvars import DEVICE_PATH, TIME_FORMAT_FILE
-from time import sleep
-import re, hashlib, util, os
-import gvars
-from Devices.base_device import network_device, interface
+import re, util
+from Devices.base_device import interface
 
 class ios_device(cisco_device):
-    '''
-    classdocs
-    '''
    
     def get_interfaces(self):
 

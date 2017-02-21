@@ -23,7 +23,7 @@ pip3 install Netmiko
 
 ### File Structure
 
-#### log.db
+#### log.txt
 
 This is the operational log.
 * Timestamp

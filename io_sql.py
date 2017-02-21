@@ -1,3 +1,4 @@
+from ssh_dispatcher import ConnectHandler
 from datetime import datetime
 from gvars import TIME_FORMAT
 from util import log
@@ -13,9 +14,8 @@ class sql_writer():
         self.cur = self.db.cursor()
         
         # Create the tables in each database, overwriting if needed
-        if kwargs and ('clean' in kwargs) and kwargs['clean']:
-            self.create_table(drop= kwargs['clean'])
-        else: self.create_table()
+        clean= kwargs.get('clean', False)
+        self.create_table(drop_tables= clean)
         
     
     def close(self):
@@ -68,8 +68,16 @@ class neighbor_db(sql_writer):
     def __init__(self, dbname, **kwargs):
         sql_writer.__init__(self, dbname, **kwargs)
         
-        # If not resuming, then set everything as not pending or working
-        if kwargs and ('resume' in kwargs) and (kwargs['resume'] == False):
+        self.resume = kwargs.get('resume', True)
+        # If resuming, then set everything as not working
+        if self.resume:
+            self.cur.execute('''
+                UPDATE Neighbor 
+                SET
+                    working= 0
+            ''')
+        else:
+            # Otherwise, just reset the working tag
             self.cur.execute('''
                 UPDATE Neighbor 
                 SET
@@ -92,7 +100,7 @@ class neighbor_db(sql_writer):
     
     def set_processed(self, _id):
         # Set the entry as not being worked on and not pending
-        self.cur.execute('''
+        result= self.cur.execute('''
             UPDATE Neighbor SET 
                 pending= 0,
                 working= 0
@@ -103,6 +111,10 @@ class neighbor_db(sql_writer):
         
     
     def get_next(self):
+        '''Returns the next pending neighbor entry as
+        an appropriately inherited network_device.
+        '''
+        
         self.cur.execute('''
             SELECT * FROM 
                 Neighbor 
@@ -119,7 +131,9 @@ class neighbor_db(sql_writer):
             # Mark the new entry as being worked on 
             self.cur.execute('UPDATE Neighbor SET working=1 WHERE id=?', (output['id'],))
             self.db.commit()
-            return dict(output)
+            
+            # Create the network device
+            return ConnectHandler(**dict(output))
         
         else:
             return None
@@ -129,9 +143,8 @@ class neighbor_db(sql_writer):
         
         # Neighbor dict template
         _device_d = {
-            'name': None,
+            'device_name': None,
             'ip': None,
-            'connect_ip': None,
             'netmiko_platform': None,
             'system_platform': None,
             'source_interface': None,
@@ -168,7 +181,7 @@ class neighbor_db(sql_writer):
                     (
                     working,
                     ip,
-                    name,
+                    device_name,
                     pending,
                     netmiko_platform,
                     system_platform,
@@ -183,7 +196,7 @@ class neighbor_db(sql_writer):
                 ;''',
                 (
                 _device_d['ip'],
-                _device_d['name'],
+                _device_d['device_name'],
                 pending,
                 _device_d['netmiko_platform'],
                 _device_d['system_platform'],
@@ -244,16 +257,16 @@ class neighbor_db(sql_writer):
         return True
 
     
-    def create_table(self, drop= True):
+    def create_table(self, drop_tables= True):
         
-        if drop: self.db.execute('DROP TABLE IF EXISTS Neighbor;')
+        if drop_tables: self.db.execute('DROP TABLE IF EXISTS Neighbor;')
         self.db.execute('''
             CREATE TABLE IF NOT EXISTS Neighbor(
             id                 INTEGER PRIMARY KEY AUTOINCREMENT, 
             ip                 TEXT NOT NULL,
             pending            INTEGER NOT NULL,
             working            INTEGER NOT NULL,
-            name               TEXT,
+            device_name        TEXT,
             netmiko_platform   TEXT,
             system_platform    TEXT,
             source_interface   TEXT,
@@ -283,7 +296,7 @@ class visited_db(sql_writer):
     def add_device_d(self, device_d= None, **kwargs):
         
         _device_d = {
-            'name': '',
+            'device_name': '',
             'ip': '',
             'serial': '',
             }
@@ -306,20 +319,20 @@ class visited_db(sql_writer):
                 INSERT INTO Visited  
                     (
                     ip,
-                    name,
+                    device_name,
                     serial,
                     updated
                     )
                 VALUES 
                     (
                     '{ip}',
-                    '{name}',
+                    '{device_name}',
                     '{serial}',
                     '{updated}'
                     );
             '''.format(
                     ip= _device_d['ip'],
-                    name= _device_d['name'],
+                    device_name= _device_d['device_name'],
                     serial= _device_d['serial'],
                     updated = datetime.now().strftime(TIME_FORMAT),  
                 ))
@@ -376,20 +389,20 @@ class visited_db(sql_writer):
                         INSERT INTO Visited  
                             (
                             ip,
-                            name,
+                            device_name,
                             serial,
                             updated
                             )
                         VALUES 
                             (
                             '{ip}',
-                            '{name}',
+                            '{device_name}',
                             '{serial}',
                             '{updated}'
                             );
                     '''.format(
                             ip= ip,
-                            name= _device.device_name,
+                            device_name= _device.device_name,
                             serial= _device.first_serial(),
                             updated= datetime.now().strftime(TIME_FORMAT)
                         ))
@@ -413,16 +426,16 @@ class visited_db(sql_writer):
         return self.cur.fetchone()[0]
     
     
-    def create_table(self, drop= True):
+    def create_table(self, drop_tables= True):
         
-        if drop: self.db.execute('DROP TABLE IF EXISTS Visited;')
+        if drop_tables: self.db.execute('DROP TABLE IF EXISTS Visited;')
         self.db.execute('''
             CREATE TABLE IF NOT EXISTS Visited(
-            id         INTEGER PRIMARY KEY AUTOINCREMENT, 
-            ip         TEXT NOT NULL UNIQUE,
-            name       TEXT,
-            serial     TEXT,
-            updated    TEXT
+            id             INTEGER PRIMARY KEY AUTOINCREMENT, 
+            ip             TEXT NOT NULL UNIQUE,
+            device_name    TEXT,
+            serial         TEXT,
+            updated        TEXT
             );
             ''')
             
@@ -474,7 +487,7 @@ class device_db(sql_writer):
             # Add the device into the database
             self.cur.execute('''
                 INSERT INTO Devices (
-                    name,
+                    device_name,
                     unique_name,
                     netmiko_platform,
                     system_platform,
@@ -487,12 +500,11 @@ class device_db(sql_writer):
                     TCP_22,
                     TCP_23,
                     AD_enabled,
-                    accessible,
-                    cred,
+                    credentials,
                     updated
                     )
                 VALUES (
-                    :name,
+                    :device_name,
                     :unique_name,
                     :netmiko_platform,
                     :system_platform,
@@ -505,12 +517,11 @@ class device_db(sql_writer):
                     :TCP_22,
                     :TCP_23,
                     :AD_enabled,
-                    :accessible,
-                    :cred,
+                    :credentials,
                     :updated
                     );''',
                 {
-                    'name': _device.device_name,
+                    'device_name': _device.device_name,
                     'unique_name': _device.unique_name(),
                     'netmiko_platform': _device.netmiko_platform,
                     'system_platform': _device.system_platform,
@@ -522,8 +533,7 @@ class device_db(sql_writer):
                     'TCP_22': _device.TCP_22,
                     'TCP_23': _device.TCP_23,
                     'AD_enabled': _device.AD_enabled,
-                    'accessible': _device.accessible,
-                    'cred': str(_device.cred),
+                    'credentials': str(_device.credentials),
                     'updated': datetime.now().strftime(TIME_FORMAT)
                     
                 })
@@ -534,7 +544,7 @@ class device_db(sql_writer):
                 self.cur.execute('''
                     INSERT INTO Interfaces (
                         parent,
-                        name,
+                        interface_name,
                         type,
                         ip,
                         subnet,
@@ -543,7 +553,7 @@ class device_db(sql_writer):
                         )
                     VALUES (
                         :parent,
-                        :name,
+                        :interface_name,
                         :type,
                         :ip,
                         :subnet,
@@ -552,7 +562,7 @@ class device_db(sql_writer):
                         );''',
                     {
                     'parent': device_id,
-                    'name': interf.interface_name,
+                    'interface_name': interf.interface_name,
                     'type': interf.type(),
                     'ip': interf.interface_ip,
                     'subnet': interf.interface_subnet,
@@ -561,6 +571,78 @@ class device_db(sql_writer):
                     })
                 interf_id= sql_writer.last_id(self, 'Interfaces')
                     
+            # Add each neighbor
+            for n in _device.neighbors:
+                self.cur.execute('''
+                    INSERT INTO Neighbors
+                    (
+                    parent,
+                    device_name,
+                    netmiko_platform,
+                    system_platform,
+                    source_interface,
+                    neighbor_interface,
+                    software,
+                    raw_cdp,
+                    updated
+                    )
+                    VALUES
+                    (
+                    :parent,
+                    :device_name,
+                    :netmiko_platform,
+                    :system_platform,
+                    :source_interface,
+                    :neighbor_interface,
+                    :software,
+                    :raw_cdp,
+                    :updated
+                    );''',
+                    {
+                    'parent': device_id,
+                    'device_name': n['device_name'],
+                    'netmiko_platform': n['netmiko_platform'],
+                    'system_platform': n['system_platform'],
+                    'source_interface': n['source_interface'],
+                    'neighbor_interface': n['neighbor_interface'],
+                    'software': n['software'],
+                    'raw_cdp': n['raw_cdp'],
+                    'updated': datetime.now().strftime(TIME_FORMAT)
+                    })
+                n_id= sql_writer.last_id(self, 'Neighbors')
+                
+                self.cur.execute('''
+                        INSERT INTO Neighbor_IPs
+                        (
+                        parent,
+                        ip
+                        )
+                        VALUES
+                        (
+                        :parent,
+                        :ip
+                        );''',
+                        {
+                        'parent': n_id,
+                        'ip': n['ip'],
+                        })
+                    
+                for ip in n['other_ips']:
+                    self.cur.execute('''
+                        INSERT INTO Neighbor_IPs
+                        (
+                        parent,
+                        ip
+                        )
+                        VALUES
+                        (
+                        :parent,
+                        :ip
+                        );''',
+                        {
+                        'parent': n_id,
+                        'ip': ip,
+                        })
                 
         self.db.commit()
         return True
@@ -568,9 +650,10 @@ class device_db(sql_writer):
      
     
     
-    def create_table(self, drop= True):
+    def create_table(self, drop_tables= True):
         
-        if drop: self.db.executescript('''
+        if drop_tables: self.db.executescript('''
+            DROP TABLE IF EXISTS Neighbor_IPs;
             DROP TABLE IF EXISTS MAC;
             DROP TABLE IF EXISTS Interfaces;
             DROP TABLE IF EXISTS Serials;
@@ -581,7 +664,7 @@ class device_db(sql_writer):
         self.db.executescript('''
             CREATE TABLE IF NOT EXISTS Devices(
                 id                 INTEGER PRIMARY KEY AUTOINCREMENT, 
-                name               TEXT,
+                device_name        TEXT,
                 unique_name        TEXT,
                 netmiko_platform   TEXT,
                 system_platform    TEXT,
@@ -593,15 +676,14 @@ class device_db(sql_writer):
                 TCP_22             BOOLEAN,
                 TCP_23             BOOLEAN,
                 AD_enabled         BOOLEAN,
-                accessible         BOOLEAN,
-                cred               TEXT,
+                credentials        TEXT,
                 updated            TEXT
             );
             
             CREATE TABLE IF NOT EXISTS Interfaces(
                 id                 INTEGER PRIMARY KEY AUTOINCREMENT,
                 parent             INTEGER NOT NULL,
-                name               TEXT NOT NULL,
+                interface_name     TEXT NOT NULL,
                 type               TEXT,
                 ip                 TEXT,
                 subnet             TEXT,
@@ -628,20 +710,32 @@ class device_db(sql_writer):
             
             CREATE TABLE IF NOT EXISTS Neighbors(
                 id                 INTEGER PRIMARY KEY AUTOINCREMENT, 
-                ip                 TEXT NOT NULL,
                 parent             INTEGER NOT NULL,
-                pending            INTEGER NOT NULL,
-                working            INTEGER NOT NULL,
-                name               TEXT,
+                device_name        TEXT,
                 netmiko_platform   TEXT,
                 system_platform    TEXT,
                 source_interface   TEXT,
                 neighbor_interface TEXT,
                 software           TEXT,
                 raw_cdp            TEXT,
+                pending            INTEGER,
+                working            INTEGER,
+                failed             INTEGER,
+                failed_msg         TEXT,
                 updated            TEXT,
                 FOREIGN KEY(parent) REFERENCES Devices(id)
-            );       
+            );  
+            
+            CREATE TABLE IF NOT EXISTS Neighbor_IPs(
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT, 
+                ip                 TEXT NOT NULL,
+                parent             INTEGER NOT NULL,
+                type               TEXT,
+                FOREIGN KEY(parent) REFERENCES Neighbors(id)
+            );  
+            
+            
+                 
             ''')
         self.db.commit()
 
