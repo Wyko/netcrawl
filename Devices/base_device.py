@@ -83,7 +83,15 @@ class network_device():
             ])
     
     
-    def attempt(self, command, proc, fn_check, v= util.C, attempts= 3, alert= True):
+    def attempt(self, 
+                command, 
+                proc, 
+                fn_check, 
+                v= util.C, 
+                attempts= 3, 
+                alert= True,
+                check_msg= None
+                ):
         '''Attempts to send a command to a remote device.
         
         Args:
@@ -115,12 +123,12 @@ class network_device():
             else:
                 # Evaluate the returned output using the passed lamda function
                 if fn_check(output): 
-                    log('Attempt {} successful on command: {}'.format(str(i+1), command), proc= proc, v=util.I)
+                    log('Attempt: {} - Successful Command: {}'.format(str(i+1), command), proc= proc, v=util.I)
                     return output
                 
                 elif i < (attempts-1):
-                    if alert: self.alert('Attempt: {} - Check Failed on Command: {}'.format(str(i+1),
-                        command), proc= proc)
+                    log('Attempt: {} - Check Failed on Command: {}'.format(
+                        str(i+1), command), proc= proc, v=util.I)
                     
                     # Sleep for an increasing amount of time
                     sleep(i*i + 1)
@@ -133,11 +141,11 @@ class network_device():
                 
     
     
-    def alert(self, msg, proc):
+    def alert(self, msg, proc, failed= True, v= util.A):
         '''Populates the failed messages variable for the device'''
-        self.failed = True
+        self.failed = failed
         self.failed_msg += proc + ': ' + msg + ' | '
-        log(msg= msg, proc= proc, v= util.A)
+        log(msg= msg, proc= proc, v= v)
     
     
     def get_serials(self):
@@ -173,7 +181,8 @@ class network_device():
  
  
     def save_config(self):
-        log('Saving config.', proc='save_config', v= util.N)
+        proc= 'base_device.save_config'
+        log('Saving config.', proc= proc, v= util.I)
         
         path = DEVICE_PATH + self.unique_name() + '/' 
         filename = datetime.now().strftime(TIME_FORMAT_FILE) + '.cfg'
@@ -187,7 +196,7 @@ class network_device():
                 self.config,
                 '\n']))
                 
-        log('Finished saving config.', proc='save_config', v= util.N)
+        log('Saved config.', proc= proc, v= util.N)
     
     
     def all_neighbors(self):
@@ -257,6 +266,7 @@ class network_device():
         Args:
             new_interfaces (List of interface objects): One or more interface objects
         """
+        proc= 'base_device.merge_interfaces'
          
         for new_interf in new_interfaces:
             match = False
@@ -266,7 +276,7 @@ class network_device():
                     match = True
                     log('Interface {} merged with old interface'.
                         format(new_interf.interface_name), 
-                        proc='merge_interfaces',
+                        proc= proc,
                         v = util.D)
                     # For each variable in the interface class, compare and overwrite new ones.
                     for key in gvars(new_interf).keys():
@@ -331,6 +341,7 @@ class network_device():
         Returns:
             Boolean: True if enable mode successful.
         '''
+        proc= 'base_device.enable'
         
         for i in range(attempts):
             
@@ -339,7 +350,7 @@ class network_device():
             except Exception as e: 
                 log('Enable failed on attempt %s. Current delay: %s' % (str(i+1), 
                     self.ssh_connection.global_delay_factor), 
-                    ip= self.ssh_connection.ip, proc= 'enable', v= util.A, error= e)
+                    ip= self.ssh_connection.ip, proc= proc, v= util.A, error= e)
                 
                 # At the final try, return the failed device.
                 if i >= attempts-1: 
@@ -352,22 +363,37 @@ class network_device():
             else: 
                 log('Enable successful on attempt %s. Current delay: %s' % 
                     (str(i+1), self.ssh_connection.global_delay_factor), 
-                    ip= self.ssh_connection.ip, proc= 'enable', v= util.D)
+                    ip= self.ssh_connection.ip, proc= proc, v= util.D)
                 
                 return True
     
     
     def process_device(self):
         '''Main method which fully populates the network_device'''
-       
-        self.start_cli_session()
-        self.enable()
-       
+        proc= 'base_device.process_devices'
+        
+        log ('Processing device', proc= proc, v=util.I)
+        
+        # Functions that must work consecutively in order to proceed
+        # On error, these raise an exception and fail the processing
         for fn in (
-            self.get_serials(),
+            self.start_cli_session(),
+            self.enable(),
             self.get_config(),
             self.parse_hostname(),
             self.get_interfaces(),
+            ):
+            try:
+                fn
+            except Exception as e:
+                self.alert(msg= fn.__name__ + ' - Error: ' + str(e), 
+                           proc= proc, )
+                raise
+        
+        # These are optional, and only leave a log message when they 
+        # fail (unless SUPPRESS_EXCEPTION has been set False)
+        for fn in (
+            self.get_serials(),
             self.get_other_ips(),
             self.get_cdp_neighbors(),
             self.get_mac_address_table()
@@ -375,11 +401,11 @@ class network_device():
             try: 
                 fn
             except Exception as e:
-                self.alert('Error: ' + str(e), 'main.process_device')
+                self.alert(fn.__name__ + ' - Error: ' + str(e), proc= proc)
                 if not gvars.SUPPRESS_ERRORS: raise
                
         
-        log('Finished getting {}'.format(self.unique_name()), proc='process_device', v= util.H)
+        log('Finished polling {}'.format(self.unique_name()), proc= proc, v= util.H)
         self.ssh_connection.disconnect()
         return True
     
@@ -399,8 +425,9 @@ class network_device():
                 'TCP_23': True if port 23 is open
                 'cred': The first successful credential dict 
         """
+        proc= 'base_device.start_cli_session'
         
-        log('Connecting to %s device %s' % (self.netmiko_platform, self.ip), self.ip, proc='start_cli_session', v= util.N)
+        log('Connecting to %s device %s' % (self.netmiko_platform, self.ip), self.ip, proc= proc, v= util.N)
         
         # Get the username and password
         credList = getCreds()
@@ -413,7 +440,7 @@ class network_device():
         
         # Check to see if SSH (port 22) is open
         if not self.TCP_22:
-            log('Port 22 is closed on %s' % self.ip, self.ip, proc='start_cli_session', v= util.A)
+            log('Port 22 is closed on %s' % self.ip, self.ip, proc= proc, v= util.A)
         else: 
             # Try logging in with each credential we have
             for cred in credList:
@@ -427,7 +454,7 @@ class network_device():
                         secret= cred['password'],
                         global_delay_factor= global_delay_factor
                     )
-                    log('Successful ssh auth to %s using %s, %s' % (self.ip, cred['user'], cred['password'][:2]), proc='start_cli_session', v= util.N)
+                    log('Successful ssh auth to %s using %s, %s' % (self.ip, cred['user'], cred['password'][:2]), proc= proc, v= util.N)
                     
                     self.credentials = cred
                     self.ssh_connection= ssh_connection
@@ -435,16 +462,16 @@ class network_device():
                     return True
         
                 except NetMikoAuthenticationException:
-                    log ('SSH auth error to %s using %s, %s' % (self.ip, cred['user'], cred['password'][:2]), proc='start_cli_session', v= util.A)
+                    log ('SSH auth error to %s using %s, %s' % (self.ip, cred['user'], cred['password'][:2]), proc= proc, v= util.A)
                     continue
                 except NetMikoTimeoutException:
-                    log('SSH to %s timed out.' % self.ip, proc='start_cli_session', v= util.A)
+                    log('SSH to %s timed out.' % self.ip, proc= proc, v= util.A)
                     # If the device is unavailable, don't try any other credentials
                     break
         
         # Check to see if port 23 (telnet) is open
         if not self.TCP_23:
-            log('Port 23 is closed on %s' % self.ip, self.ip, proc='start_cli_session', v= util.A)
+            log('Port 23 is closed on %s' % self.ip, self.ip, proc= proc, v= util.A)
         else:
             for cred in credList:
                 try:
@@ -456,7 +483,7 @@ class network_device():
                         password=cred['password'],
                         secret=cred['password']
                     )
-                    log('Successful telnet auth to %s using %s, %s' % (self.ip, cred['user'], cred['password'][:2]), proc='start_cli_session', v= util.N)
+                    log('Successful telnet auth to %s using %s, %s' % (self.ip, cred['user'], cred['password'][:2]), proc= proc, v= util.N)
                     
                     self.credentials = cred
                     self.ssh_connection= ssh_connection
@@ -465,10 +492,10 @@ class network_device():
                 
                 except NetMikoAuthenticationException:
                     log('Telnet auth error to %s using %s, %s' % 
-                        (self.ip, cred['user'], cred['password'][:2]), v= util.A, proc= 'start_cli_session')
+                        (self.ip, cred['user'], cred['password'][:2]), v= util.A, proc= proc)
                     continue
                 except:
-                    log('Telnet to %s timed out.' % self.ip, proc='start_cli_session', v= util.A)
+                    log('Telnet to %s timed out.' % self.ip, proc= proc, v= util.A)
                     # If the device is unavailable, don't try any other credentials
                     break
         

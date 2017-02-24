@@ -6,7 +6,8 @@ import sys, argparse, textwrap, os, util, io_sql, gvars
     
 
 def normal_run(ip, netmiko_platform, **kwargs):
-    log('Starting Normal Run', proc= 'main.normal_run', v= util.H)
+    proc= 'main.normal_run'
+    log('Starting Normal Run', proc= proc, v= util.H)
     
     # Load the databases
     vlist = io_sql.visited_db(MAIN_DB_PATH, **kwargs)
@@ -22,7 +23,7 @@ def normal_run(ip, netmiko_platform, **kwargs):
         # Get the next device from the pending list
         device = nlist.get_next()
         if not device:
-            log('No device returned.', proc= 'main.normal_run', v= util.C)
+            log('No device returned.', proc= proc, v= util.C)
             break
         
         # Skip devices which have already been processed
@@ -34,18 +35,18 @@ def normal_run(ip, netmiko_platform, **kwargs):
         else: visited= False
         
         if visited:
-            log('- Device {1} at {0} has already been processed. Skipping.'.format(device.ip, device.device_name), proc='normal_run', v= util.N)
+            log('- Device {1} at {0} has already been processed. Skipping.'.format(device.ip, device.device_name), proc= proc, v= util.N)
             nlist.set_processed(device.device_id)
             continue
 
         log('---- Processing {name} at {ip} || {pending} devices pending ----'.format(
             ip= device.ip, name= device.device_name, pending= nlist.count_pending()), 
-            proc='main.normal_run', v= util.H)
+            proc= proc, v= util.H)
         
         # Poll the device
         try: device.process_device()
         except Exception as e:
-            device.alert('Connection to {} failed: {}'.format(device.ip, str(e)), proc= 'main.normal_run')
+            device.alert('Connection to {} failed: {}'.format(device.ip, str(e)), proc= proc)
             if not gvars.SUPPRESS_ERRORS: raise
         
         # Record the device as being processed and save it
@@ -57,14 +58,14 @@ def normal_run(ip, netmiko_platform, **kwargs):
 
         else:
             log('Successfully processed {}'.format(device.device_name), 
-                proc='process_pending_list', v= util.NORMAL)
+                proc= proc, v= util.NORMAL)
          
             # Save the device to disl and it's neighbors to the db 
             device.save_config()
             nlist.add_device_neighbors(device)
     
     log('Normal run complete. {} devices pending.'.
-            format(nlist.count_pending()), proc ='main.normal_run', v= util.H)
+            format(nlist.count_pending()), proc= proc, v= util.H)
 
 
 
@@ -73,7 +74,9 @@ def scan_range():
 
 
 def single_run(ip, netmiko_platform, **kwargs):
-    log('Processing connection to {}'.format(ip), proc='main.single_run', v= util.H)
+    proc= 'main.single_run'
+    
+    log('Processing connection to {}'.format(ip), proc= proc, v= util.H)
     
     device = ConnectHandler(ip= ip, netmiko_platform= netmiko_platform)
     
@@ -81,7 +84,7 @@ def single_run(ip, netmiko_platform, **kwargs):
     
     try: device.process_device()
     except Exception as e:
-        device.alert(msg= 'Connection to {} failed: {}'.format(device.ip, str(e)), proc= 'main.single_run')
+        device.alert(msg= 'Connection to {} failed: {}'.format(device.ip, str(e)), proc= proc)
         if not gvars.SUPPRESS_ERRORS: raise
         
     # Save the device
@@ -107,7 +110,7 @@ This package will process a specified host and pull information from it. If desi
         type= int,
         dest= 'v',
         default= util.HIGH,
-        choices= range(0, 5),
+        choices= range(7),
         metavar= 'LEVEL',
         help= textwrap.dedent(
             '''\
@@ -116,8 +119,9 @@ This package will process a specified host and pull information from it. If desi
               1: Critical alerts
               2: Non-critical alerts 
               3: High level info
-              4: Common info
-              5: Debug level info (All info)''')
+              4: Normal level
+              5: Informational level
+              6: Debug level info (All info)''')
         )
     
     parser.add_argument(
@@ -186,7 +190,8 @@ This package will process a specified host and pull information from it. If desi
 
     
 if __name__ == "__main__":
-        
+    proc= 'main.__main__'
+    
     # Parse CLI arguments
     if len(sys.argv[1:]) > 0: 
         args = parse_cli()
@@ -198,7 +203,7 @@ if __name__ == "__main__":
         if not os.path.exists(RUN_PATH):
             os.makedirs(RUN_PATH)
         
-        log('##### Starting Run #####', proc= 'main.__main__', v= util.H)
+        log('##### Starting Run #####', proc= proc, v= util.H)
          
         if args.recursive: 
             normal_run(
@@ -220,7 +225,7 @@ if __name__ == "__main__":
         print('No arguments passed. Host is required.')
      
      
-    log('##### Run Complete #####', proc= 'main.__main__', v= util.H)
+    log('##### Run Complete #####', proc= proc, v= util.H)
      
     
     

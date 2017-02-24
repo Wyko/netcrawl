@@ -61,7 +61,7 @@ class sql_writer():
         '''Get the next entry ID in the table. Make sure a valid ID was 
         returned and then increment by one.
         '''
-        
+        proc= 'io_sql.sql_writer.last_id'
         # Get the last row number in the table
         self.cur.execute('select seq from sqlite_sequence where name="{}";'.format(table))
         _id = self.cur.fetchone()
@@ -69,11 +69,11 @@ class sql_writer():
         # If it was returned, increment by one
         if _id and _id[0]: 
             log('Last entry placed at id {} in {}'.format(_id[0], table),
-                proc= 'sql_writer.last_id', v= util.D)
+                proc= proc, v= util.D)
             return int(_id[0])
         else: 
             log('No valid ID returned in table: {}'.format(table), 
-                proc= 'sql_writer.last_id', v= util.C)
+                proc= proc, v= util.C)
             return None
         
 
@@ -156,6 +156,7 @@ class neighbor_db(sql_writer):
     
     
     def add_device_d(self, device_d= None, **kwargs):
+        proc= 'io_sql.neighbor_db.add_device_d'
         
         # Neighbor dict template
         _device_d = {
@@ -225,13 +226,13 @@ class neighbor_db(sql_writer):
             
         except sqlite3.IntegrityError as e:  # @UndefinedVariable
             log('Duplicate IP rejected: {}'.format(_device_d['ip']), 
-                proc= 'neighbor_db.add_device_d', error= e, 
+                proc= proc, error= e, 
                 v= util.D)
             return False
         
         else:
             log('Device added to Neighbor table: {}'.format(_device_d['ip']), 
-                proc= 'neighbor_db.add_device_d', 
+                proc= proc, 
                 v= util.D)
             self.db.commit()
     
@@ -246,9 +247,10 @@ class neighbor_db(sql_writer):
         Returns:
             Boolean: True if write was successful, False otherwise.
         """
+        proc= 'io_sql.neighbor_db.add_device_neighbors'
         if not _list: _list= []
         
-        log('Starting to add devices to database', proc= 'neighbor_db.add_device_neighbors',
+        log('Adding neighbors to database', proc= proc,
             v= util.N)
         
         # If a single device was passed, add it to the list
@@ -256,7 +258,7 @@ class neighbor_db(sql_writer):
         
         # Return an error if no data was passed
         if not _list: 
-            log('No devices to add', proc= 'neighbor_db.add_device_neighbors', v= util.A)
+            log('No devices to add', proc= proc, v= util.A)
             return False
         
         
@@ -298,18 +300,19 @@ class neighbor_db(sql_writer):
         
 
 class visited_db(sql_writer):
+    TABLE_NAME= 'Visited'
     
     def __init__(self, dbname, **kwargs):
         sql_writer.__init__(self, dbname, **kwargs)
     
     def __len__(self):
-        return sql_writer.count(self, 'Visited')
+        return sql_writer.count(self, self.TABLE_NAME)
     
     def ip_exists(self, ip):
-        return sql_writer.ip_exists(self, ip, 'Visited')
+        return sql_writer.ip_exists(self, ip, self.TABLE_NAME)
     
     def ip_name_exists(self, ip, name):
-        return sql_writer.ip_name_exists(self, ip, name, 'Visited')
+        return sql_writer.ip_name_exists(self, ip, name, self.TABLE_NAME)
     
     def add_device_d(self, device_d= None, **kwargs):
         
@@ -379,7 +382,7 @@ class visited_db(sql_writer):
         """ 
         if not _list: _list= []
         
-        log('Adding device(s) to visited list', 
+        log('Adding device(s) to {} table.'.format(self.TABLE_NAME), 
             proc= 'visited_db.add_device_nd', v= util.N)
         
         # If a single device was passed, add it to the list so that we can
@@ -502,15 +505,16 @@ class device_db(sql_writer):
         Returns:
             Boolean: True if write was successful, False otherwise.
         """ 
+        proc= 'io_sql.device_db.add_device_nd'
         
         # Return an error if no data was passed    
         if not (_list or _device): 
-            log('No devices to add', proc= 'device_db.add_device_nd', v= util.A)
+            log('No devices to add', proc= proc, v= util.A)
             return False
         
         if not _list: _list= []
         
-        log('Starting to add device to table', proc= 'device_db.add_device_nd', v= util.N)
+        log('Adding device(s) to {} table'.format(self.TABLE_NAME), proc= proc, v= util.N)
         
         # If a single device was passed, add it for group processing
         if _device: _list.append(_device)
