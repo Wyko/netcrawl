@@ -15,8 +15,10 @@ HIGH = 3
 H = 3
 NORMAL = 4
 N = 4
-DEBUG = 5
-D = 5
+INFORMATIONAL = 5
+I = 5
+DEBUG = 6
+D = 6
 
 
 def getCreds():
@@ -116,7 +118,7 @@ def log(msg,
                 )
     
     # Print the message to console            
-    if v <= VERBOSITY and print_out: print('{:<25.25}: {}'.format(proc, msg))
+    if v <= VERBOSITY and print_out: print('{:<35.35}: {}'.format(proc, msg))
     
     if not os.path.exists(log_path):
         os.makedirs(log_path)

@@ -12,52 +12,62 @@ from Devices.base_device import interface
 class ios_device(cisco_device):
    
     def get_interfaces(self):
-
-        log('Starting ios interface parsing.', proc="parse_ios_interfaces", v= util.N)
+        proc= 'ios_device.parse_ios_interfaces'
+        log('Starting ios interface parsing.', proc= proc, v= util.I)
         
         interfaces = []
         # If no device config was passed, return
         if not self.config: 
-            log('No configuration passed. Returning.', proc = 'parse_ios_interfaces', v= util.A)
-            return interfaces
+            log('Error: No data in self.config.', proc= proc, v= util.A)
+            raise ValueError(proc+ ': No data in self.config.')
         
         # Split out the interfaces from the raw config
-        raw_interfaces = re.findall(r'\n(^interface[\s\S]+?)\n!', self.config, (re.MULTILINE|re.IGNORECASE))
+        raw_interfaces = re.findall(r'\n(^interface[\s\S]+?)\n!', self.config, (re.M|re.I))
         
         # For each interface parsed from the raw config, create a new interface 
         # object and parse it into structured data
         for interf in raw_interfaces:
+            i = interface()
             
-            temp_interf = interface()
+            try: output= re.search(r'''
+                ^\s*?            # Beginning of a line, with whitespace
+                interf.*?        # The word interface, followed by some characters
+                \b               # A word boundry
+                (                # The full interface name capture group
+                ([A-Za-z]{2,})   # An interface name, consisting of at least 2 letters
+                ([\d\/]+)        # The interface number, with potential backslashes
+                )$
+            ''', interf, re.I | re.X | re.M) 
+            except: continue
+            else:
+                if output and output.re.groups==3: 
+                    i.interface_name = output.group(1)
+                    i.interface_type = output.group(2)
+                    i.interface_number = output.group(3)
+                else: continue
             
-            # Parse the interface name from the raw data. If that isn't possible, continue
-            try: temp_interf.interface_name = re.search(r'^interface[ ]?(.+)$', interf, re.IGNORECASE | re.MULTILINE).group(1)
-            except: 
-                log('Raw config parsing failed to find interface name. Skipping interface', proc='parse_ios_interfaces', v= util.C)
-                continue
-            
-            # Description
-            try: temp_interf.interface_description = re.search(r'description[ ]+(.+)$', interf, re.IGNORECASE | re.MULTILINE).group(1)
+            # Parse description
+            try: i.interface_description = re.search(r'description[ ]+(.+)$', interf, re.I|re.M).group(1)
             except: pass
             
             try:
                 # IP and Subnet (Matches both octets and CIDR)
                 ip_info = re.search(r'ip address.*?(\d{1,3}(?:\.\d{1,3}){3})[ ]?((?:\/\d+)|(?:\d{1,3}(?:\.\d{1,3}){3}))', interf, re.IGNORECASE | re.MULTILINE)
-                if ip_info and ip_info.group(1): temp_interf.interface_ip = ip_info.group(1)
-                if ip_info and ip_info.group(2): temp_interf.interface_subnet = ip_info.group(2)    
+                if ip_info and ip_info.group(1): i.interface_ip = ip_info.group(1)
+                if ip_info and ip_info.group(2): i.interface_subnet = ip_info.group(2)    
             except Exception as e:
                 log('Exception while parsing IP and Subnet: {}'.format(str(e)),
-                    proc = 'parse_ios_interfaces', v= util.C)
+                    proc = proc, v= util.C)
                 pass
             
-            interfaces.append(temp_interf)
+            interfaces.append(i)
     
         if len(interfaces) > 0:
-            log('{} interfaces found.'.format(
-                len(interfaces)), proc= 'parse_ios_interfaces', v= util.N)  
+            log('Interfaces found: {}'.format(
+                len(interfaces)), proc= proc, v= util.N)  
         else:
-            log('No interfaces found. Raw_interfaces was: {}'.format(
-                raw_interfaces), proc= 'parse_ios_interfaces', v= util.C)  
-            raise ValueError('parse_nxos_interfaces: No interfaces found.')               
+            log('Error: No interfaces found. Raw_interfaces was: {}'.format(
+                raw_interfaces), proc= proc, v= util.C)  
+            raise ValueError(proc+ ': No interfaces found.')               
         
         self.merge_interfaces(interfaces)  

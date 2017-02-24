@@ -6,77 +6,108 @@ Created on Feb 18, 2017
 
 from util import log
 import re, util
-from Devices.base_device import interface
 from Devices.cisco_device import cisco_device
+from Devices.base_device import interface
+
 
 class nxos_device(cisco_device):
     
-    def get_mac_address_table(self, attempts= 3):
-        '''Populates self.mac_address_table from the remote device.
+    
+    def get_serials(self):
+        '''Returns serials based on XML output'''
+        proc= 'nxos_device.get_serials'
         
-        Returns:
-            Boolean: True if the command was successful
-            
-        Raises:
-            Exception: ValueError if no result was found.
-        '''
+        log('Starting to get serials', proc= proc, v= util.I)
         
-        for i in range(attempts):
-            output= self.ssh_connection.send_command_expect('show mac address-table')
+        output= self.attempt('show inv | xml | sec <ROW_inv>', 
+             proc= proc, 
+             fn_check= lambda x: bool(re.search(r'ROW_inv', x, re.I)))
+        
+        # Split the output into a list of dicts
+        self.serial_numbers= [{x: y for (x, y) in re.findall(r'<(.+?)>(.*?)<\/\1>', entry, re.I)} 
+                    for entry in re.split(r'<RoW_inv>', output, flags=(re.I|re.M)) if entry.strip()]
+        
+        log('Serials found: {}.'.format(len(self.serial_numbers)), proc= proc, v= util.N)
+
+    
+    def get_interfaces(self):
+        proc= 'nxos_device.get_interfaces'
+        
+        try: self.get_interfaces_xml()
+        except: 
+            log('XML parsing failed. Attempting config parsing.',
+                proc= proc, v= util.I)
+            self.get_interfaces_config()
+        
+        
+    def get_interfaces_xml(self):
+        proc='nxos_device.get_interfaces_xml'
+        
+        log('Getting XML interface data', proc= proc, v= util.I)
+        
+        # Poll the device for interfaces
+        output= self.attempt('show interface | xml | sec ROW_interface', 
+                 proc= proc, fn_check= lambda x: '<ROW_interface>' in x)
+        
+        # Split the results into individual interfaces
+        output= [x for x in output.strip().split('<ROW_interface>') if not x.strip() == '']
+        
+        # Parse each interface into variables
+        re_comp= re.compile(r'<(.+?)>(.*?)<\/\1>')
+        interfaces = []
+        for interf in output:
             
-            # Check if something that looks like a MAC was returned
-            if bool(re.search(r'(?:[0-9A-F]{2,4}[\:\-\.]){2,7}[0-9A-F]{2,4}', output)):
-                self.raw_mac_address_table = output
-                log('Attempt {}: Got valid output.'.format(
-                    str(i+1)), self.ip, proc= 'get_mac_address_table', v= util.N)
-                
-                # Parse the table
-                self.parse_mac_address_table()                
-                return True
+            # Parse the interface data
+            entries= dict(re_comp.findall(interf))
+            i= interface()
             
-            # Otherwise, continue the loop or break out
-            elif i+1 >= attempts:
-                log('Attempt Final {}: No valid output. Got[:20]: {}'.format(
-                    str(i+1), output), self.ip, proc= 'get_mac_address_table', v= util.C)
-                raise ValueError('get_mac_address_table: Attempt Final {}: ' +
-                    'No valid output. Got[:20]: {}'.format(i, output))
-            else:
-                log('Attempt {}: No valid output. Got[:20]: {}'.format(
-                    str(i+1), output), self.ip, proc= 'get_mac_address_table', v= util.D)
-                continue
-                
+            i.raw_interface= interf
+            
+            # Set the interface variables based on the results
+            i.interface_name= entries.pop('interface', None)
+            if not i.interface_name: continue
+            
+            x= self.split_interface_name(i.interface_name)
+            if x: 
+                i.interface_type= x[0]
+                i.interface_number= x[1]
+            
+            i.interface_ip= next((v for k,v in entries.items() 
+                                if k=='svi_ip_addr' or k=='eth_ip_addr'), None) 
+            
+            i.interface_description= next((v for k,v in entries.items() 
+                                if k=='svi_desc' or k=='desc'), None)
+            
+            i.interface_subnet= entries.pop('svi_ip_mask', None)
+            
+            i.parent_interface_name= entries.pop('eth_bundle', None)
+            
+            interfaces.append(i)
+        
+        
+        if len(interfaces) > 0:
+            log('Interfaces found: {}.'.format(
+                len(interfaces)), proc= proc, v= util.N)  
+            
+        else:
+            log('No interfaces found', proc= proc, v= util.C)
+            raise ValueError(proc+ ': No interfaces found.')     
+            
+        self.merge_interfaces(interfaces)
+        
         
     
-    def parse_mac_address_table(self):
-        if not self.raw_mac_address_table:
-            self.alert('Parse function called without having raw data.', 
-                       proc= 'nxos_device.parse_mac_address_table')
-            return False
+    
+    def get_interfaces_config(self):
+        proc= 'nxos_device.get_interfaces_config'
         
-        output= re.finditer(              # #### NX-OS MAC Regex ####
-            r'''            
-            (?P<mac>             # MAC capture group
-            (?:[0-9A-F]{2,4}[\:\-\.]){2,7}[0-9A-F]{2,4}
-            )                    
-            .*?                  # Skip all characters up to the interface
-            (?P<interface>      # Interface capture group
-            [A-Z0-9\/]+    
-            )
-            $                    # Match if interface is at the end of the line
-            ''', self.raw_mac_address_table, (re.X | re.I | re.M) )
-        
-        # Return a dictionary containing the MAC's and interfaces
-        self.mac_address_table= [m.groupdict() for m in output]
-        
-    def get_interfaces(self):
-        
-        log('Starting', proc='parse_nxos_interfaces', v= util.N)
+        log('Getting config interface data', proc= proc, v= util.I)
         
         # If no device config was passed, return it now
         if self.config == '': return
         
         # Split out the interfaces from the raw config
-        raw_interfaces = re.findall(r'(^interface[\s\S]+?)\n\s*\n', self.config, re.MULTILINE)
+        raw_interfaces = re.findall(r'(^interface[\s\S]+?)\n\s*\n', self.config, re.M)
         
         interfaces = []
         
@@ -84,16 +115,29 @@ class nxos_device(cisco_device):
         for interf in raw_interfaces:
             i = interface()
             
-            try: i.interface_name = re.search(r'^interface[ ]?(.+)$', interf, re.IGNORECASE | re.MULTILINE).group(1)
+            try: output= re.search(r'''
+                ^\s*?            # Beginning of a line, with whitespace
+                interf.*?        # The word interface, followed by some characters
+                \b               # A word boundry
+                (                # The full interface name capture group
+                ([A-Za-z\-]{2,}) # An interface name, consisting of at least 2 letters
+                ([\d\/]+)        # The interface number, with potential backslashes
+                )$
+            ''', interf, re.I | re.X | re.M) 
             except: continue
-            else: i.interface_type = str(re.split(r'\d', i.interface_name)[0])
+            else:
+                if output and output.re.groups==3: 
+                    i.interface_name = output.group(1)
+                    i.interface_type = output.group(2)
+                    i.interface_number = output.group(3)
+                else: continue
             
             # Description
-            try: i.interface_description = re.search(r'description[ ]+(.+)$', interf, re.IGNORECASE | re.MULTILINE).group(1)
+            try: i.interface_description = re.search(r'description[ ]+(.+)$', interf, re.I | re.M).group(1)
             except: pass
             
             # IP and Subnet (Matches both octets and CIDR)
-            ip_info = re.search(r'ip address.*?(\d{1,3}(?:\.\d{1,3}){3})[ ]?((?:\/\d+)|(?:\d{1,3}(?:\.\d{1,3}){3}))', interf, re.IGNORECASE | re.MULTILINE)
+            ip_info = re.search(r'ip address.*?(\d{1,3}(?:\.\d{1,3}){3})[ ]?((?:\/\d+)|(?:\d{1,3}(?:\.\d{1,3}){3}))', interf, re.I | re.M)
             if ip_info and ip_info.group(1): i.interface_ip = ip_info.group(1)
             if ip_info and ip_info.group(2): i.interface_subnet = ip_info.group(2)    
             
@@ -101,13 +145,13 @@ class nxos_device(cisco_device):
             interfaces.append(i)
     
         if len(interfaces) > 0:
-            log('{} interfaces found.'.format(
-                len(interfaces)), proc= 'parse_nxos_interfaces', v= util.N)  
+            log('Interfaces found: {}'.format(
+                len(interfaces)), proc= proc, v= util.N)  
             
         else:
             log('No interfaces found. Raw_interfaces was: {}'.format(
-                raw_interfaces), proc= 'parse_nxos_interfaces', v= util.C)
-            raise ValueError('parse_nxos_interfaces: No interfaces found.')                
+                raw_interfaces), proc= proc, v= util.C)
+            raise ValueError(proc+ ': No interfaces found.')                
         
         # Merge the interfaces into the device interfaces
         self.merge_interfaces(interfaces)  

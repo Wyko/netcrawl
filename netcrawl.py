@@ -5,7 +5,7 @@ from util import log
 import sys, argparse, textwrap, os, util, io_sql, gvars
     
 
-def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
+def normal_run(ip, netmiko_platform, **kwargs):
     log('Starting Normal Run', proc= 'main.normal_run', v= util.H)
     
     # Load the databases
@@ -26,7 +26,14 @@ def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
             break
         
         # Skip devices which have already been processed
-        if vlist.ip_exists(device.ip): 
+        if (kwargs.get('skip_named_duplicates', False) and 
+            vlist.ip_name_exists(device.ip, device.device_name)):
+            visited= True           
+        elif vlist.ip_exists(device.ip): 
+            visited= True
+        else: visited= False
+        
+        if visited:
             log('- Device {1} at {0} has already been processed. Skipping.'.format(device.ip, device.device_name), proc='normal_run', v= util.N)
             nlist.set_processed(device.device_id)
             continue
@@ -39,6 +46,7 @@ def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
         try: device.process_device()
         except Exception as e:
             device.alert('Connection to {} failed: {}'.format(device.ip, str(e)), proc= 'main.normal_run')
+            if not gvars.SUPPRESS_ERRORS: raise
         
         # Record the device as being processed and save it
         nlist.set_processed(device.device_id)
@@ -60,10 +68,14 @@ def normal_run(ip= None, netmiko_platform= 'cisco_ios', **kwargs):
 
 
 
-def single_run(ip, platform):
+def scan_range():
+    pass
+
+
+def single_run(ip, netmiko_platform, **kwargs):
     log('Processing connection to {}'.format(ip), proc='main.single_run', v= util.H)
     
-    device = ConnectHandler(ip= ip, netmiko_platform= platform)
+    device = ConnectHandler(ip= ip, netmiko_platform= netmiko_platform)
     
     # Process the device
     
@@ -73,19 +85,13 @@ def single_run(ip, platform):
         if not gvars.SUPPRESS_ERRORS: raise
         
     # Save the device
-    dlist = io_sql.device_db(DEVICE_DB_PATH)
+    dlist = io_sql.device_db(DEVICE_DB_PATH, **kwargs)
     dlist.add_device_nd(device)
     dlist.db.close()
     
-    if device.failed: 
-        print('Connection failed.')
-        return False
-    
-    else:
-        # Output the device info to console
-        print('\n' + str(device) + '\n')
-        print(device.neighbor_table())
-        return True
+    # Output the device info to console
+    print('\n' + str(device) + '\n')
+    print(device.neighbor_table())
 
 
 
@@ -154,6 +160,16 @@ This package will process a specified host and pull information from it. If desi
         )
     
     parser.add_argument(
+        '-sd',
+        '--skip-named_duplicates',
+        action="store_true",
+        dest= 'skip_named_duplicates',
+        help= 'If a CDP entry has the same host name as a previously visited device,'
+        ' ignore it.',
+        default = False
+        )
+    
+    parser.add_argument(
         'host',
         action='store',
         help= 'Hostname or IP address of the starting device'
@@ -193,7 +209,12 @@ if __name__ == "__main__":
                 )
          
         else: 
-            single_run(ip= args.host, platform= args.platform)
+            single_run(
+                ip= args.host, 
+                netmiko_platform= args.platform,
+                resume= args.resume,
+                clean= args.clean,
+                )
      
     else:
         print('No arguments passed. Host is required.')

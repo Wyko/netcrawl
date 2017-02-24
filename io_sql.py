@@ -33,6 +33,22 @@ class sql_writer():
         if output and output[0] == 1: return True
         else: return False
         
+    def ip_name_exists(self, ip, name, table):
+        '''Check if a given IP OR Name exists in the database'''
+        
+        self.cur.execute('''
+            select exists 
+                (select * from {} 
+                where 
+                    ip='{}' 
+                    OR 
+                    device_name='{}'
+                limit 1);'''.format(table, ip, name))
+        output = self.cur.fetchone()
+        
+        if output and output[0] == 1: return True
+        else: return False    
+        
         
     def count(self, table):
         '''Counts the number of rows in the table'''
@@ -245,7 +261,7 @@ class neighbor_db(sql_writer):
         
         
         for device in _list:
-            for neighbor in device.neighbors:           
+            for neighbor in device.all_neighbors():           
                 
                 # Check if the ip is a known address.
                 # If not, add it to the list of ips to check
@@ -292,13 +308,15 @@ class visited_db(sql_writer):
     def ip_exists(self, ip):
         return sql_writer.ip_exists(self, ip, 'Visited')
     
+    def ip_name_exists(self, ip, name):
+        return sql_writer.ip_name_exists(self, ip, name, 'Visited')
     
     def add_device_d(self, device_d= None, **kwargs):
         
         _device_d = {
             'device_name': '',
             'ip': '',
-            'serial': '',
+            'serialnum': '',
             }
      
         # If a dict was supplied, add values from it into the template
@@ -333,7 +351,7 @@ class visited_db(sql_writer):
             '''.format(
                     ip= _device_d['ip'],
                     device_name= _device_d['device_name'],
-                    serial= _device_d['serial'],
+                    serial= _device_d['serialnum'],
                     updated = datetime.now().strftime(TIME_FORMAT),  
                 ))
             
@@ -361,8 +379,8 @@ class visited_db(sql_writer):
         """ 
         if not _list: _list= []
         
-        log('Starting to add devices to visited list', proc= 'visited_db.add_device_nd',
-            v= util.N)
+        log('Adding device(s) to visited list', 
+            proc= 'visited_db.add_device_nd', v= util.N)
         
         # If a single device was passed, add it to the list so that we can
         # simplify the code later on
@@ -380,7 +398,25 @@ class visited_db(sql_writer):
             # Get the IP's from the device 
             ip_list = _device.get_ips()
             log('{} has {} ip(s)'.format(_device.device_name, len(ip_list)), 
-                proc='visited_db.add_device_nd', v= util.N)
+                proc='visited_db.add_device_nd', v= util.I)
+            
+            # For failed devices which couldn't be fully polled:
+            if len(ip_list) ==0:
+                self.cur.execute('''
+                            INSERT INTO Visited  
+                                (
+                                device_name,
+                                updated
+                                )
+                            VALUES 
+                                (
+                                '{device_name}',
+                                '{updated}'
+                                );
+                        '''.format(
+                                device_name= _device.device_name,
+                                updated= datetime.now().strftime(TIME_FORMAT)
+                            ))
             
             for ip in ip_list:
                 
@@ -408,15 +444,13 @@ class visited_db(sql_writer):
                         ))
                 except sqlite3.IntegrityError:  # @UndefinedVariable
                     log('Duplicate IP rejected: {}'.format(ip), 
-                        proc= 'visited_db.add_device_nd', 
-                        v= util.D)
+                        proc= 'visited_db.add_device_nd', v= util.D)
                     continue
                 
         
         self.db.commit()
         log('Added {} devices to visited table'.format(len(_list)), 
-            proc= 'visited_db.add_device_nd',
-            v= util.N)
+            proc= 'visited_db.add_device_nd', v= util.I)
         return True
     
     
@@ -432,7 +466,7 @@ class visited_db(sql_writer):
         self.db.execute('''
             CREATE TABLE IF NOT EXISTS Visited(
             id             INTEGER PRIMARY KEY AUTOINCREMENT, 
-            ip             TEXT NOT NULL UNIQUE,
+            ip             TEXT UNIQUE,
             device_name    TEXT,
             serial         TEXT,
             updated        TEXT
@@ -483,174 +517,255 @@ class device_db(sql_writer):
         
         # Process each device
         for _device in _list:
+            device_id= self.insert_device_entry(_device)
             
-            # Add the device into the database
-            self.cur.execute('''
-                INSERT INTO Devices (
-                    device_name,
-                    unique_name,
-                    netmiko_platform,
-                    system_platform,
-                    software,
-                    raw_cdp,
-                    raw_config,
-                    updated,
-                    failed,
-                    failed_msg,
-                    TCP_22,
-                    TCP_23,
-                    username,
-                    password,
-                    cred_type,
-                    updated
-                    )
-                VALUES (
-                    :device_name,
-                    :unique_name,
-                    :netmiko_platform,
-                    :system_platform,
-                    :software,
-                    :raw_cdp,
-                    :raw_config,
-                    :updated,
-                    :failed,
-                    :failed_msg,
-                    :TCP_22,
-                    :TCP_23,
-                    :username,
-                    :password,
-                    :cred_type,
-                    :updated
-                    );''',
-                {
-                    'device_name': _device.device_name,
-                    'unique_name': _device.unique_name(),
-                    'netmiko_platform': _device.netmiko_platform,
-                    'system_platform': _device.system_platform,
-                    'software': _device.software,
-                    'raw_cdp': _device.raw_cdp,
-                    'raw_config': _device.config,
-                    'failed': int(_device.failed),
-                    'failed_msg': _device.failed_msg,
-                    'TCP_22': _device.TCP_22,
-                    'TCP_23': _device.TCP_23,
-                    'username': _device.credentials['user'],
-                    'password': _device.credentials['password'][:2],
-                    'cred_type': _device.credentials['type'],
-                    'updated': datetime.now().strftime(TIME_FORMAT)
-                    
-                })
-            device_id= sql_writer.last_id(self, 'Devices')
+            # Add all the device's serials
+            for serial in _device.serial_numbers:
+                self.insert_serial_entry(device_id, serial)
             
+            # Add all of the device's interfaces            
             for interf in _device.interfaces:
+                interface_id= self.insert_interface_entry(device_id, interf)
                 
-                self.cur.execute('''
-                    INSERT INTO Interfaces (
-                        parent,
-                        interface_name,
-                        type,
-                        ip,
-                        subnet,
-                        virtual_ip,
-                        description
-                        )
-                    VALUES (
-                        :parent,
-                        :interface_name,
-                        :type,
-                        :ip,
-                        :subnet,
-                        :virtual_ip,
-                        :description
-                        );''',
-                    {
-                    'parent': device_id,
-                    'interface_name': interf.interface_name,
-                    'type': interf.type(),
-                    'ip': interf.interface_ip,
-                    'subnet': interf.interface_subnet,
-                    'virtual_ip': interf.virtual_ip,
-                    'description': interf.interface_description
-                    })
-                interf_id= sql_writer.last_id(self, 'Interfaces')
-                    
-            # Add each neighbor
-            for n in _device.neighbors:
-                self.cur.execute('''
-                    INSERT INTO Neighbors
-                    (
-                    parent,
-                    device_name,
-                    netmiko_platform,
-                    system_platform,
-                    source_interface,
-                    neighbor_interface,
-                    software,
-                    raw_cdp,
-                    updated
-                    )
-                    VALUES
-                    (
-                    :parent,
-                    :device_name,
-                    :netmiko_platform,
-                    :system_platform,
-                    :source_interface,
-                    :neighbor_interface,
-                    :software,
-                    :raw_cdp,
-                    :updated
-                    );''',
-                    {
-                    'parent': device_id,
-                    'device_name': n['device_name'],
-                    'netmiko_platform': n['netmiko_platform'],
-                    'system_platform': n['system_platform'],
-                    'source_interface': n['source_interface'],
-                    'neighbor_interface': n['neighbor_interface'],
-                    'software': n['software'],
-                    'raw_cdp': n['raw_cdp'],
-                    'updated': datetime.now().strftime(TIME_FORMAT)
-                    })
-                n_id= sql_writer.last_id(self, 'Neighbors')
+                # Add all the interface's mac addresses
+                for mac_address in interf.mac_address_table:
+                    mac_id= self.insert_mac_entry(device_id, interface_id, mac_address)
                 
-                self.cur.execute('''
-                        INSERT INTO Neighbor_IPs
-                        (
-                        parent,
-                        ip
-                        )
-                        VALUES
-                        (
-                        :parent,
-                        :ip
-                        );''',
-                        {
-                        'parent': n_id,
-                        'ip': n['ip'],
-                        })
-                    
-                for ip in n['other_ips']:
-                    self.cur.execute('''
-                        INSERT INTO Neighbor_IPs
-                        (
-                        parent,
-                        ip
-                        )
-                        VALUES
-                        (
-                        :parent,
-                        :ip
-                        );''',
-                        {
-                        'parent': n_id,
-                        'ip': ip,
-                        })
+                # Add each neighbor that was matched to an interface
+                for neighbor in interf.neighbors:
+                    neighbor_id= self.insert_neighbor_entry(device_id, interface_id, neighbor)
+                
+            # Add each neighbor not matched to an interface
+            for neighbor in _device.neighbors:
+                neighbor_id= self.insert_neighbor_entry(device_id, None, neighbor)
                 
         self.db.commit()
         return True
     
+    
+    def insert_device_entry(self, _device):
+        # Trim the password
+        _password= _device.credentials.get('password', None)
+        if _password: _password= _password[:2]
+       
+        # Add the device into the database
+        self.cur.execute('''
+            INSERT INTO Devices (
+                device_name,
+                unique_name,
+                netmiko_platform,
+                system_platform,
+                software,
+                raw_cdp,
+                raw_config,
+                updated,
+                failed,
+                failed_msg,
+                TCP_22,
+                TCP_23,
+                username,
+                password,
+                cred_type,
+                updated
+                )
+            VALUES (
+                :device_name,
+                :unique_name,
+                :netmiko_platform,
+                :system_platform,
+                :software,
+                :raw_cdp,
+                :raw_config,
+                :updated,
+                :failed,
+                :failed_msg,
+                :TCP_22,
+                :TCP_23,
+                :username,
+                :password,
+                :cred_type,
+                :updated
+                );''',
+            {
+                'device_name': _device.device_name,
+                'unique_name': _device.unique_name(),
+                'netmiko_platform': _device.netmiko_platform,
+                'system_platform': _device.system_platform,
+                'software': _device.software,
+                'raw_cdp': _device.raw_cdp,
+                'raw_config': _device.config,
+                'failed': int(_device.failed),
+                'failed_msg': _device.failed_msg,
+                'TCP_22': _device.TCP_22,
+                'TCP_23': _device.TCP_23,
+                'username': _device.credentials.get('user', None),
+                'password': _password,
+                'cred_type': _device.credentials.get('type', None),
+                'updated': datetime.now().strftime(TIME_FORMAT)
+                
+            })
+        return sql_writer.last_id(self, 'Devices')
+    
+    
+    def insert_interface_entry(self, device_id, interf):
+        self.cur.execute('''
+            INSERT INTO Interfaces (
+                device_id,
+                interface_name,
+                interface_type,
+                interface_number,
+                ip,
+                subnet,
+                virtual_ip,
+                description,
+                updated
+                )
+            VALUES (
+                :device_id,
+                :interface_name,
+                :interface_type,
+                :interface_number,
+                :ip,
+                :subnet,
+                :virtual_ip,
+                :description,
+                :updated
+                );''',
+            {
+            'device_id': device_id,
+            'interface_name': interf.interface_name,
+            'interface_type': interf.interface_type,
+            'interface_number': interf.interface_number,
+            'ip': interf.interface_ip,
+            'subnet': interf.interface_subnet,
+            'virtual_ip': interf.virtual_ip,
+            'description': interf.interface_description,
+            'updated': datetime.now().strftime(TIME_FORMAT)
+            })
+        return sql_writer.last_id(self, 'Interfaces')
+    
+    
+    def insert_serial_entry(self, device_id, serial):
+        self.cur.execute('''
+            INSERT INTO Serials (
+                device_id,
+                serialnum,
+                name,
+                description,
+                productid,
+                vendorid,
+                updated
+                )
+            VALUES (
+                :device_id,
+                :serialnum,
+                :name,
+                :description,
+                :productid,
+                :vendorid,
+                :updated
+                );''',
+            {
+            'device_id': device_id,
+            'serialnum': serial.get('serialnum', None),
+            'name': serial.get('name', None),
+            'description': serial.get('desc', None),
+            'productid': serial.get('productid', None),
+            'vendorid': serial.get('vendorid', None),
+            'updated': datetime.now().strftime(TIME_FORMAT)
+            })
+        return sql_writer.last_id(self, 'Serials')
+    
+    
+    def insert_neighbor_ip_entry(self, neighbor_id, ip):
+        self.cur.execute('''
+            INSERT INTO Neighbor_IPs
+            (
+                neighbor_id,
+                ip,
+                updated
+            )
+            VALUES
+            (
+                :neighbor_id,
+                :ip,
+                :updated
+            );''',
+            {
+            'parent': neighbor_id,
+            'ip': ip,
+            'updated': datetime.now().strftime(TIME_FORMAT)
+            })
+        return sql_writer.last_id(self, 'Neighbor_IPs')
+    
+    
+    def insert_neighbor_entry(self, device_id, interface_id, neighbor):
+        self.cur.execute('''
+            INSERT INTO Neighbors
+            (
+                device_id,
+                interface_id,
+                device_name,
+                netmiko_platform,
+                system_platform,
+                source_interface,
+                neighbor_interface,
+                software,
+                raw_cdp,
+                updated
+            )
+            VALUES
+            (
+                :device_id,
+                :interface_id,
+                :device_name,
+                :netmiko_platform,
+                :system_platform,
+                :source_interface,
+                :neighbor_interface,
+                :software,
+                :raw_cdp,
+                :updated
+            );''',
+            {
+            'device_id': device_id,
+            'interface_id': interface_id,
+            'device_name': neighbor.get('device_name', None),
+            'netmiko_platform': neighbor.get('netmiko_platform', None),
+            'system_platform': neighbor.get('system_platform', None),
+            'source_interface': neighbor.get('source_interface', None),
+            'neighbor_interface': neighbor.get('neighbor_interface', None),
+            'software': neighbor.get('software', None),
+            'raw_cdp': neighbor.get('raw_cdp', None),
+            'updated': datetime.now().strftime(TIME_FORMAT)
+            })
+        return sql_writer.last_id(self, 'Neighbors')
      
+    
+    def insert_mac_entry(self, device_id, interface_id, mac_address):
+        self.cur.execute('''
+            INSERT INTO MAC
+            (
+                device_id,
+                interface_id,
+                mac_address,
+                updated
+            )
+            VALUES
+            (
+                :device_id,
+                :interface_id,
+                :mac_address,
+                :updated
+            );''',
+            {
+            'device_id': device_id,
+            'interface_id': interface_id,
+            'mac_address': mac_address,
+            'updated': datetime.now().strftime(TIME_FORMAT)
+            })
+        return sql_writer.last_id(self, 'MAC')
+        
     
     
     def create_table(self, drop_tables= True):
@@ -666,7 +781,7 @@ class device_db(sql_writer):
 
         self.db.executescript('''
             CREATE TABLE IF NOT EXISTS Devices(
-                id                 INTEGER PRIMARY KEY AUTOINCREMENT, 
+                device_id          INTEGER PRIMARY KEY AUTOINCREMENT, 
                 device_name        TEXT,
                 unique_name        TEXT,
                 netmiko_platform   TEXT,
@@ -685,36 +800,50 @@ class device_db(sql_writer):
             );
             
             CREATE TABLE IF NOT EXISTS Interfaces(
-                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-                parent             INTEGER NOT NULL,
+                interface_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id          INTEGER NOT NULL,
                 interface_name     TEXT NOT NULL,
-                type               TEXT,
+                interface_number   TEXT,
+                interface_type     TEXT,
                 ip                 TEXT,
                 subnet             TEXT,
                 virtual_ip         TEXT,
                 description        TEXT,
-                FOREIGN KEY(parent) REFERENCES Devices(id)
+                updated            TEXT,
+                FOREIGN KEY(device_id) REFERENCES Devices(device_id) 
+                    ON DELETE CASCADE ON UPDATE CASCADE
             );
 
             CREATE TABLE IF NOT EXISTS MAC(
-                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-                interface          INTEGER NOT NULL,
-                address            TEXT NOT NULL,
-                FOREIGN KEY(interface) REFERENCES Interfaces(id)
+                mac_id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id              INTEGER NOT NULL,
+                interface_id           INTEGER NOT NULL,
+                mac_address            TEXT NOT NULL,
+                updated                TEXT,
+                FOREIGN KEY(interface_id) REFERENCES Interfaces(interface_id) 
+                    ON DELETE CASCADE ON UPDATE CASCADE,
+                FOREIGN KEY(device_id) REFERENCES Devices(device_id) 
+                    ON DELETE CASCADE ON UPDATE CASCADE
+                
             );
             
              CREATE TABLE IF NOT EXISTS Serials(
-                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-                parent             INTEGER NOT NULL,
-                serial             TEXT NOT NULL UNIQUE,
+                serial_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id          INTEGER NOT NULL,
+                serialnum          TEXT NOT NULL,
                 name               TEXT,
                 description        TEXT,
-                FOREIGN KEY(parent) REFERENCES Devices(id)
+                productid          TEXT,
+                vendorid           TEXT,
+                updated            TEXT,
+                FOREIGN KEY(device_id) REFERENCES Devices(device_id) 
+                    ON DELETE CASCADE ON UPDATE CASCADE
             );
             
             CREATE TABLE IF NOT EXISTS Neighbors(
-                id                 INTEGER PRIMARY KEY AUTOINCREMENT, 
-                parent             INTEGER NOT NULL,
+                neighbor_id        INTEGER PRIMARY KEY AUTOINCREMENT, 
+                device_id          INTEGER NOT NULL,
+                interface_id       INTEGER,
                 device_name        TEXT,
                 netmiko_platform   TEXT,
                 system_platform    TEXT,
@@ -727,18 +856,21 @@ class device_db(sql_writer):
                 failed             INTEGER,
                 failed_msg         TEXT,
                 updated            TEXT,
-                FOREIGN KEY(parent) REFERENCES Devices(id)
+                FOREIGN KEY(device_id) REFERENCES Devices(device_id) 
+                    ON DELETE CASCADE ON UPDATE CASCADE,
+                FOREIGN KEY(interface_id) REFERENCES Interfaces(interface_id) 
+                    ON DELETE CASCADE ON UPDATE CASCADE
             );  
             
             CREATE TABLE IF NOT EXISTS Neighbor_IPs(
-                id                 INTEGER PRIMARY KEY AUTOINCREMENT, 
+                neighbor_ip_id     INTEGER PRIMARY KEY AUTOINCREMENT, 
+                neighbor_id        INTEGER NOT NULL,
                 ip                 TEXT NOT NULL,
-                parent             INTEGER NOT NULL,
                 type               TEXT,
-                FOREIGN KEY(parent) REFERENCES Neighbors(id)
+                updated            TEXT,
+                FOREIGN KEY(neighbor_id) REFERENCES Neighbors(neighbor_id) 
+                    ON DELETE CASCADE ON UPDATE CASCADE
             );  
-            
-            
                  
             ''')
         self.db.commit()

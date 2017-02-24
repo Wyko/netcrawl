@@ -15,7 +15,7 @@ DELAY_INCREASE = 0.3
 BASE_DELAY = 1
 
 # Set to false to get full tracebacks
-SUPPRESS_ERRORS = False
+SUPPRESS_ERRORS = True
 
 
 RUN_PATH = current_file_dir + '/runtime/' 

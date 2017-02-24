@@ -8,7 +8,7 @@ from util import log, parse_ip
 from time import sleep
 import re, util
 import gvars
-from Devices.base_device import network_device
+from Devices.base_device import network_device, interface
 
 class cisco_device(network_device):
     '''
@@ -24,7 +24,7 @@ class cisco_device(network_device):
             self.device_name= output.group(1)
             return True
         
-        else: log('Regex parsing failed, trying prompt parsing.', proc='parse_hostname', v= util.N)
+        else: log('Regex parsing failed, trying prompt parsing.', proc='parse_hostname', v= util.D)
         
         if not self.ssh_connection: 
             log('No self.ssh_connection object passed, function failed', proc= 'parse_hostname', v= util.C)
@@ -53,53 +53,135 @@ class cisco_device(network_device):
         log('Failed. No hostname found.', proc= 'parse_hostname', v= util.C)
         raise ValueError('parse_hostname failed. No hostname found.')
 
-
+    
     def get_serials(self):
-        log('Starting to get serials', proc= 'get_serials', v= util.N)
-        sleep(3)
-        # Try three times to get the output, waiting longer each time 
-        limit= 3
-        for i in range(limit):
-            try: raw_output = self.ssh_connection.send_command_expect('sh inv')
-            except Exception as e: 
-                log('Show inventory attempt %s failed.' % str(i+1), proc= 'get_serials', v= util.A)
-                if i < limit: continue
-                else:
-                    raise ValueError('''get_serials: Show inventory attempt \
-finally failed on attempt {} with error: {}.'''.format(str(i+1), str(e))) 
+        proc= 'cisco_device.get_serials'
         
-            # Get each serial number
-            output = re.findall(r'^Name.*?["](.+?)["][\s\S]*?Desc.*?["](.+?)["][\s\S]*?SN:[ ]?(\w+)', raw_output, re.MULTILINE | re.IGNORECASE)
-            
-            # See if valid results were produced.
-            if not (output and output[0]):
-                log('''Failed to get serials on attempt {}. Re.Findall produced no \
-results. Raw_output[:20] was: {}'''.format(str(i+1), raw_output[:20]), 
-                    ip= self.ssh_connection.ip, proc= 'get_serials', v= util.A)
-                
-                # Continue if we haven't tried enough times yet, otherwise error out
-                if i < limit: continue
-                else:
-                    raise ValueError('''get_serials: Finally failed to get serials \
-on attempt {}. Re.Findall produced no results. \
-Raw_output was: {}'''.format(str(i+1), raw_output))
-                
+        log('Starting to get serials', proc= proc, v= util.I)
+        
+        # Poll the device for the serials
+        raw_output= self.attempt('show inventory', 
+                     proc= proc, 
+                     fn_check= lambda x: bool(re.search(r'''
+                                        ^Name.*?["](.+?)["][\s\S]*?
+                                        Desc.*?["](.+?)["][\s\S]*?
+                                        SN:[ ]?(\w+)''',
+                                        x, re.X|re.M|re.I)))
+        
+        # Parse each serial number
+        output = re.findall(r'''
+                            ^Name.*?["](.+?)["][\s\S]*?
+                            Desc.*?["](.+?)["][\s\S]*?
+                            SN:[ ]?(\w+)''',
+                            raw_output, re.X|re.M|re.I)
+        
+        # Raise error if no results were produced.
+        if not (output and output[0]):
+            log('Failed to get serials. Re.Findall produced no results. ' + 
+                'Raw_output[:20] was: {}'.format(raw_output[:20]), 
+                ip= self.ssh_connection.ip, proc= proc, v= util.A)
+            raise ValueError(proc+ ': Failed to get serials. Re.Findall produced no results '+
+                'Raw_output was: {}'''.format(raw_output))
                 
         # Add the found serials to the parent device        
         serials = []
         for i in output:
             serials.append({
                 'name': i[0],
-                'description': i[1],
-                'serial': i[2]
+                'desc': i[1],
+                'serialnum': i[2]
                 })
-        log('Finished. Got {} serials.'.format(len(serials)), proc= 'get_serials', v= util.N)
+        log('Serials found: {}'.format(len(serials)), proc= proc, v= util.N)
         self.serial_numbers.extend(serials)
         return True
         
+    
+    def split_interface_name(self, interface_name):
+        '''Returns a tuple containing (interface_type, interface_number)'''
         
+        try: output= re.search(r'''
+                ([A-Za-z]{2,})   # An interface name, consisting of at least 2 letters
+                ([\d\/]+)        # The interface number, with potential backslashes
+            ''', interface_name, re.I | re.X | re.M) 
+        except: 
+            return None
+        else:
+            if output and output.re.groups==2: 
+                return (
+                    output.group(1),
+                    output.group(2),
+                    )
+            else: 
+                return None
+    
+
+    def get_mac_address_table(self, attempts= 3):
+        '''Populates self.mac_address_table from the remote device.
+        
+        Returns:
+            Boolean: True if the command was successful
+            
+        Raises:
+            Exception: ValueError if no result was found.
+        '''
+        
+        # Try the two command formats
+        try: self.raw_mac_address_table = self.attempt('show mac address-table', 
+                         proc= 'cisco_device.get_mac_address_table', 
+                         fn_check= lambda x: bool(re.search(r'(?:[0-9A-F]{2,4}[\:\-\.]){2,7}[0-9A-F]{2,4}', x, re.I)),
+                         alert= False)
+        except: 
+            try: self.raw_mac_address_table = self.attempt('show mac-address-table', 
+                         proc= 'cisco_device.get_mac_address_table', 
+                         fn_check= lambda x: bool(re.search(r'(?:[0-9A-F]{2,4}[\:\-\.]){2,7}[0-9A-F]{2,4}', x, re.I)),
+                         alert= False)
+            except:
+                log('No MAC addresses found.', proc= 'cisco_device.get_mac_address_table', v=util.C)
+                return False
+        
+        # Parse the table
+        output= re.finditer(         # #### MAC Regex ####
+            r'''            
+            (?P<mac_address>         # MAC capture group
+                (?:[0-9A-F]{2,4}[\:\-\.]){2,7}[0-9A-F]{2,4}
+            )                    
+            .*?                      # Skip all characters up to the interface
+            (?P<interface_name>      # Interface capture group
+                (?P<interface_type>
+                    [A-Za-z]{2,}     # At least two letters
+                )
+                (?P<interface_number>
+                    [\d\/]+          # Any combination of numbers and
+                )    
+            )
+            \s*?$                    # Match if interface is at the end of the line
+            ''', self.raw_mac_address_table, flags= (re.X | re.I | re.M) )
+
+        # Return a dictionary containing the MAC's and interfaces
+        self.mac_address_table= [m.groupdict() for m in output]
+        
+        for mac in self.mac_address_table:
+            # Ignore blank mac addresses
+            if mac == 'ffff.ffff.ffff': continue
+            
+            # Get the associated parent interface
+            interf= self.match_partial_to_full_interface(mac['interface_name'])
+           
+            # If no match was found, create a new interface for it and append it to the list
+            if not interf:
+                interf= interface()
+                interf.interface_description= '**** Matched from MAC Address, not interface list'
+                interf.interface_name= mac['interface_name']
+                self.interfaces.append(interf)
+            
+            # Add the MAC to the interface
+            interf.mac_address_table.append(mac['mac_address'])
+        return True
+
+
     def get_config(self, attempts=5):
-        log('Beginning config download from %s' % self.ssh_connection.ip, proc='get_config', v= util.N)
+        proc= 'cisco_device.get_config'
+        log('Beginning config download from %s' % self.ssh_connection.ip, proc= proc, v= util.I)
         raw_config = ''
         
         sleep(2)
@@ -141,79 +223,84 @@ Raw_output was: {}'''.format(str(i+1), raw_output))
         for i in range(attempts):
             
             # Get the CDP neighbors for the device 
-            try: raw_cdp = self.get_raw_cdp_output()
-            except:
-                log('No CDP output retrieved from %s' % self.ssh_connection.ip, proc='get_cdp_neighbors', v= util.C)
-                if i >= attempts: raise ValueError('get_cdp_neighbors: No CDP output retrieved from %s' % self.ssh_connection.ip)
-            else:
-                
-                # Check if we got actual output    
-                if not raw_cdp: 
-                    log('Attempt {}: Command successful but no CDP output retrieved from {}'.format(str(i), self.ssh_connection.ip), proc='get_cdp_neighbors', v= util.C)
-                    if i >= attempts: raise ValueError('get_cdp_neighbors: Command successful but no CDP output retrieved from %s' % self.ssh_connection.ip)
-                    continue
-                
-                # Check whether CDP is enabled at all
-                if re.search(r'not enabled', raw_cdp, re.I): 
-                    log('CDP not enabled on %s' % self.ssh_connection.ip, proc='get_cdp_neighbors', v= util.C)
-                    raise ValueError('get_cdp_neighbors: CDP not enabled on %s' % self.ssh_connection.ip)
-                
-                # Split the full 'sh cdp [...]' output into non-empty individual neighbors
-                cdp_output= list(filter(None, re.split(r'-{4,}', raw_cdp)))
-                
-                # Parse each neighbor's CDP data
-                cdp_neighbor_list = []
-                for entry in cdp_output:
-                    try: cdp_neighbor = self.parse_neighbor(entry)
-                    except: continue
-                    else:
-                        if cdp_neighbor: cdp_neighbor_list.append(cdp_neighbor)
-                
-                # If no neighbors were found, try again
-                if not len(cdp_neighbor_list) > 0:
-                    log('Attempt {}: No CDP neighbors found. raw_cdp[20] was: {}'.format(
-                        str(i+1), raw_cdp[:20]), proc='get_cdp_neighbors', v= util.A)
-                    if i >= attempts: raise ValueError('get_cdp_neighbors: Command successful but no CDP output retrieved from %s' % self.ssh_connection.ip)
-                    continue
+            raw_cdp= self.attempt('show cdp neighbor detail', 
+                         proc= 'cisco_device.get_cdp_neighbors', 
+                         attempts= attempts,
+                         fn_check= lambda x: bool(x))
+            
+            # Check whether CDP is enabled at all
+            if re.search(r'not enabled', raw_cdp, re.I): 
+                log('CDP not enabled on %s' % self.ssh_connection.ip, proc='get_cdp_neighbors', v= util.C)
+                raise ValueError('get_cdp_neighbors: CDP not enabled on %s' % self.ssh_connection.ip)
+            
+            # Split the full 'sh cdp [...]' output into non-empty individual neighbors
+            cdp_output= list(filter(None, re.split(r'-{4,}', raw_cdp)))
+            
+            # Parse each neighbor's CDP data
+            cdp_neighbor_list = []
+            neighbor_count= 0
+            for entry in cdp_output:
+                try: cdp_neighbor = self.parse_neighbor(entry)
+                except: continue
                 else:
-                    log('{} CDP neighbors found from {}.'.format(len(cdp_neighbor_list), self.ssh_connection.ip), proc='get_cdp_neighbors', v= util.NORMAL)
+                    if not cdp_neighbor: continue
+                    neighbor_count +=1
                     
-                self.neighbors= cdp_neighbor_list
-                self.raw_cdp = raw_cdp
-                return True
-
-
-    def get_raw_cdp_output(self, attempts= 3):
-        """Get the CDP neighbor detail from the given device using SSH
-        
-        Returns:
-            String: The raw CDP output.
-        """
-        
-        log('Starting, device %s' % self.ssh_connection.ip, proc='get_raw_cdp_output', v= util.N)
-        
-        # Show cdp neighbor detail
-        for i in range(attempts):
-            try: result = self.ssh_connection.send_command_expect("show cdp neighbor detail")
-            except Exception as e:
-                log('Sh cdp n det failed on attempt %s. Current delay: %s' % 
-                    (str(i+1), self.ssh_connection.global_delay_factor), 
-                    ip= self.ssh_connection.ip, proc= 'get_raw_cdp_output', v= util.A,
-                    error= e)
-                
-                self.ssh_connection.global_delay_factor += gvars.DELAY_INCREASE
-                sleep(1)
+                    # Match a neighbor to a full neighbor entry
+                    interf= self.match_partial_to_full_interface(cdp_neighbor['source_interface'])
+                    if interf: interf.neighbors.append(cdp_neighbor)
+                    
+                    # Or else add it to the list of unmatched neighbors
+                    else: cdp_neighbor_list.append(cdp_neighbor)
+            
+            # If no neighbors were found, try again
+            if not neighbor_count > 0:
+                log('Attempt {}: No CDP neighbors found. raw_cdp[20] was: {}'.format(
+                    str(i+1), raw_cdp[:20]), proc='get_cdp_neighbors', v= util.A)
+                if i >= attempts: raise ValueError('get_cdp_neighbors: Command successful but no CDP output retrieved from %s' % self.ssh_connection.ip)
                 continue
-            else: 
-                log('Sh cdp n det produced output on attempt {}'.format
-                    (str(i+1), self.ssh_connection.global_delay_factor), 
-                    self.ssh_connection.ip, proc='get_raw_cdp_output', v= util.NORMAL)
-                break
-     
-        # Split the raw output by the common '---' separator and return a list of 
-        # CDP entries
-        if result: return result
-        else: return None
+            else:
+                log('{} CDP neighbors found from {}.'.format(neighbor_count, self.ssh_connection.ip), proc='get_cdp_neighbors', v= util.NORMAL)
+                
+            self.neighbors= cdp_neighbor_list
+            self.raw_cdp = raw_cdp
+            return True
+
+    
+    def match_partial_to_full_interface(self, partial):
+        '''Given a partial MAC address, iterate through all of this device's
+        interfaces and match the address to an interface. Return the 
+        interface.
+        
+        1. Split the MAC interface by name and number
+        2. For each interface, check if the interface name starts with the MAC name
+        3. If so, check if the interface number matches the MAC interface number
+        4. Add the MAC to the interface MAC table
+        '''
+        if not partial: return None
+        # Split the MAC
+        output= self.split_interface_name(partial)
+        
+        # Returns none if no matches were found (such as when the interface is "Switch"
+        if not output: return None
+        
+        # Match expanded interface names
+        p = re.compile(r'^' + output[0] + r'.*?' + output[1], re.I)
+        
+        # Check if the mac's interface name matches an interface
+        for interf in self.interfaces:
+            if bool(p.match(interf.interface_name)):
+                log('Partial interface {} matched interface {}'.format(
+                    partial, interf.interface_name),
+                    v= util.D, proc= 'cisco_device.match_mac_to_interface')
+                
+                return interf 
+        
+        # If no match was found return false
+        self.alert('No interface match for {}'.format(partial), proc= 'cisco.match_mac_to_interface')
+        return None
+                    
+        
     
         
     def parse_netmiko_platform(self, cdp_input):

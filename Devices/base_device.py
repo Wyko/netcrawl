@@ -9,23 +9,25 @@ import re, hashlib, util, os, gvars
 
 class interface():
     '''Generic network device interface'''
-    def __init__(self):
+    def __init__(self, **kwargs):
         
-        self.interface_name= None
-        self.interface_ip= None
-        self.interface_subnet= None
-        self.interface_description= None
-        self.interface_status= None
-        self.tunnel_destination_ip= None
-        self.remote_interface= None
-        self.tunnel_status= None
-        self.interface_type= None
-        self.virtual_ip= None
+        self.interface_description= kwargs.pop('interface_description', None)
+        self.tunnel_destination_ip= kwargs.pop('tunnel_destination_ip', None)
+        self.interface_subnet= kwargs.pop('interface_subnet', None)
+        self.interface_status= kwargs.pop('interface_status', None)
+        self.remote_interface= kwargs.pop('remote_interface', None)
+        self.interface_number= kwargs.pop('interface_number', None)
+        self.interface_name= kwargs.pop('interface_name', None)
+        self.interface_type= kwargs.pop('interface_type', None)
+        self.tunnel_status= kwargs.pop('tunnel_status', None)
+        self.raw_interface= kwargs.pop('raw_interface', None)
+        self.interface_ip= kwargs.pop('interface_ip', None)
+        self.virtual_ip= kwargs.pop('virtual_ip', None)
+        
+        # Mutable Arguments
+        self.mac_address_table= []
+        self.neighbors= []
     
-    
-    def type(self):
-        return re.split(r'\d', self.interface_name)[0]
-               
     
     def __str__(self):
             
@@ -45,7 +47,6 @@ class network_device():
         self.ssh_connection= kwargs.pop('ssh_connection', None)
         self.neighbor_id= kwargs.pop('neighbor_id', None)        
         self.device_name= kwargs.pop('device_name', None)
-        self.credentials= kwargs.pop('credentials', None)
         self.AD_enabled= kwargs.pop('AD_enabled', None)
         self.software= kwargs.pop('software', None)
         self.raw_cdp= kwargs.pop('raw_cdp', None)
@@ -56,28 +57,81 @@ class network_device():
         self.ip= kwargs.pop('ip', None)
         
         # Mutable arguments
+        self.credentials= kwargs.pop('credentials', {})
+        self.mac_address_table= []
         self.serial_numbers= []
         self.interfaces = []
         self.neighbors = []
         self.other_ips= []
-        self.mac_address_table= []
         
         # Other Args
-        self.failed = False
         self.failed_msg = ''
+        self.failed = False
         
-
+        
     def __str__(self):
         return '\n'.join([
-            'Device Name:     ' + str(self.device_name),
-            'Unique Name:     ' + str(self.unique_name()),
-            'Management IP:   ' + str(self.ip),
-            'First Serial:    ' + str(self.serial_numbers[0]),
-            'Serial Count:    ' + str(len(self.serial_numbers)),
-            'Interface Count: ' + str(len(self.interfaces)),
-            'Neighbor Count:  ' + str(len(self.neighbors)),
-            'Config Size:     ' + str(len(self.config))
+            'Device Name:       ' + str(self.device_name),
+            'Unique Name:       ' + str(self.unique_name()),
+            'Management IP:     ' + str(self.ip),
+            'First Serial:      ' + ', '.join([x+': ' + y  for x, y in self.serial_numbers[0].items()]),
+            'Serial Count:      ' + str(len(self.serial_numbers)),
+            'Dynamic MAC Count: ' + str(len(self.mac_address_table)),
+            'Interface Count:   ' + str(len(self.interfaces)),
+            'Neighbor Count:    ' + str(len(self.neighbors)),
+            'Config Size:       ' + str(len(self.config))
             ])
+    
+    
+    def attempt(self, command, proc, fn_check, v= util.C, attempts= 3, alert= True):
+        '''Attempts to send a command to a remote device.
+        
+        Args:
+            command (String): The command to send
+            proc (String): The calling process (for logging purposes)
+            fn_check (Lambda): A boolean function to evaluate the output
+            
+        Optional Args:
+            v (Integer): Log alert level for a failed run
+            attempts (Integer): Number of times to try the command
+            alert (Boolean): LIf True, log failed attempts
+        
+        '''
+        for i in range(attempts):
+            try:
+                output = self.ssh_connection.send_command_expect(command)
+            except Exception as e:
+                if i < (attempts-1):
+                    log('Attempt: {} - Failed Command: {} - Error: {}'.format(str(i+1),
+                        command, str(e)), proc= proc, v=util.I)
+                    # Sleep for an increasing amount of time
+                    sleep(i*i + 1)
+                    continue
+                else:
+                    if alert: self.alert('Attempt Final: {} - Failed Command: {} - Error: {}'.format(str(i+1),
+                        command, str(e)), proc= proc)
+                    raise ValueError('Attempt Final: {} - Failed Command: {} - Error: {}'.format(str(i+1),
+                        command, str(e)))
+            else:
+                # Evaluate the returned output using the passed lamda function
+                if fn_check(output): 
+                    log('Attempt {} successful on command: {}'.format(str(i+1), command), proc= proc, v=util.I)
+                    return output
+                
+                elif i < (attempts-1):
+                    if alert: self.alert('Attempt: {} - Check Failed on Command: {}'.format(str(i+1),
+                        command), proc= proc)
+                    
+                    # Sleep for an increasing amount of time
+                    sleep(i*i + 1)
+                    continue
+                else:
+                    if alert: self.alert('Attempt Final: {} - Check Failed on Command: {}'.format(str(i+1),
+                        command), proc= proc)
+                    raise ValueError('Attempt Final: {} - Check Failed on Command: {}'.format(str(i+1),
+                        command))
+                
+    
     
     def alert(self, msg, proc):
         '''Populates the failed messages variable for the device'''
@@ -135,7 +189,19 @@ class network_device():
                 
         log('Finished saving config.', proc='save_config', v= util.N)
     
- 
+    
+    def all_neighbors(self):
+        _list= []
+        for n in self.neighbors:
+            _list.append(n)
+            
+        for i in self.interfaces:
+            for n in i.neighbors:
+                _list.append(n)
+                
+        return _list
+    
+    
     def neighbor_table(self, sh_src= True, sh_name= True, sh_ip = True, sh_platform = True ):
         """Returns a formatted table of neighbors.
         
@@ -168,6 +234,16 @@ class network_device():
             if sh_platform: entry += '{platform}'.format(platform = n['system_platform'])
             entries.append(entry)
         
+        for i in self.interfaces:
+            for n in i.neighbors:
+                entry = '-- '
+                if sh_name: entry += '{name:30.29}, '.format(name = n['device_name'])
+                if sh_ip: entry += '{ip:15}, '.format(ip = n['ip'])
+                if sh_src: entry += '*{src:25}, '.format(src = n['source_interface'])
+                if sh_platform: entry += '{platform}'.format(platform = n['system_platform'])
+                entries.append(entry)
+        
+        entries.append('\n* Un-Matched source interface')
         output += '\n'.join(entries)
         
         return output
@@ -237,8 +313,8 @@ class network_device():
         # Make a hash of the serials        
         if serials and len(self.serial_numbers) > 0:
             h = hashlib.md5()
-            for x in sorted(self.serial_numbers, key= lambda k: k['serial']):
-                h.update(x['serial'].encode())
+            for x in sorted(self.serial_numbers, key= lambda k: k['serialnum']):
+                h.update(x['serialnum'].encode())
             output.append(h.hexdigest()[:5])
         
         return '_'.join(output)
@@ -246,7 +322,7 @@ class network_device():
     
     def first_serial(self):
         if len(self.serial_numbers) == 0: return ''
-        else: return self.serial_numbers[0]['serial']
+        else: return self.serial_numbers[0]['serialnum']
     
     
     def enable(self, attempts= 3):
@@ -291,9 +367,9 @@ class network_device():
             self.get_serials(),
             self.get_config(),
             self.parse_hostname(),
-            self.get_cdp_neighbors(),
             self.get_interfaces(),
             self.get_other_ips(),
+            self.get_cdp_neighbors(),
             self.get_mac_address_table()
             ):
             try: 
@@ -330,7 +406,7 @@ class network_device():
         credList = getCreds()
         
         self.ssh_connection= None
-        self.credentials= None
+        self.credentials= {}
         self.failed= True
         self.TCP_22= port_is_open(22, self.ip)
         self.TCP_23= port_is_open(23, self.ip)
