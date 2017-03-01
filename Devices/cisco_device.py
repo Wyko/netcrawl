@@ -24,18 +24,18 @@ class cisco_device(network_device):
         
         else: log('Regex parsing failed, trying prompt parsing.', proc= proc, v= util.D)
         
-        if not self.ssh_connection: 
-            log('No self.ssh_connection object available. Method failed', proc= proc, v= util.C)
-            raise ValueError(proc+ ': No self.ssh_connection object available')
+        if not self.connection: 
+            log('No self.connection object available. Method failed', proc= proc, v= util.C)
+            raise ValueError(proc+ ': No self.connection object available')
         
         # If the hostname couldn't be parsed, get it from the prompt    
         for i in range(attempts):
             try:
-                output = self.ssh_connection.find_prompt()
+                output = self.connection.find_prompt()
             except ValueError:
-                self.ssh_connection.global_delay_factor += gvars.DELAY_INCREASE
+                self.connection.global_delay_factor += gvars.DELAY_INCREASE
                 log('Failed to find the prompt during attempt %s. Increasing delay to %s'  
-                    % (str(i+1), self.ssh_connection.global_delay_factor), 
+                    % (str(i+1), self.connection.global_delay_factor), 
                     proc= proc, v= util.A)
                 sleep(2 + i)
                 continue
@@ -77,7 +77,7 @@ class cisco_device(network_device):
         if not (output and output[0]):
             log('Failed to get serials. Re.Findall produced no results. ' + 
                 'Raw_output[:20] was: {}'.format(raw_output[:20]), 
-                ip= self.ssh_connection.ip, proc= proc, v= util.A)
+                ip= self.connection.ip, proc= proc, v= util.A)
             raise ValueError(proc+ ': Failed to get serials. Re.Findall produced no results '+
                 'Raw_output was: {}'''.format(raw_output))
                 
@@ -137,7 +137,7 @@ class cisco_device(network_device):
                          fn_check= lambda x: bool(re.search(r'(?:[0-9A-F]{2,4}[\:\-\.]){2,7}[0-9A-F]{2,4}', x, re.I)),
                          alert= False)
             except:
-                log('No MAC addresses found.', proc= proc, v=util.C)
+                log('No MAC addresses found.', proc= proc, v=util.A)
                 return False
         
         # Parse the table
@@ -188,7 +188,7 @@ class cisco_device(network_device):
     def get_config(self, attempts=5):
         proc= 'cisco_device.get_config'
         
-        log('Beginning config download from %s' % self.ssh_connection.ip, proc= proc, v= util.I)
+        log('Beginning config download from %s' % self.connection.ip, proc= proc, v= util.I)
 
         self.config= self.attempt('show run', 
                              proc= proc, 
@@ -197,7 +197,7 @@ class cisco_device(network_device):
                              attempts= attempts,
                              )
         
-        log('Config download successful.', self.ssh_connection.ip, proc= proc, v= util.N)
+        log('Config download successful.', self.connection.ip, proc= proc, v= util.N)
     
     
     def get_other_ips(self):
@@ -221,8 +221,8 @@ class cisco_device(network_device):
             
             # Check whether CDP is enabled at all
             if re.search(r'not enabled', raw_cdp, re.I): 
-                log('CDP not enabled on %s' % self.ssh_connection.ip, proc= proc, v= util.C)
-                raise ValueError(proc+ ': CDP not enabled on %s' % self.ssh_connection.ip)
+                log('CDP not enabled on %s' % self.connection.ip, proc= proc, v= util.C)
+                raise ValueError(proc+ ': CDP not enabled on %s' % self.connection.ip)
             
             # Split the full 'sh cdp [...]' output into non-empty individual neighbors
             cdp_output= list(filter(None, re.split(r'-{4,}', raw_cdp)))
@@ -248,7 +248,7 @@ class cisco_device(network_device):
             if not neighbor_count > 0:
                 log('Attempt {}: No CDP neighbors found. raw_cdp[20] was: {}'.format(
                     str(i+1), raw_cdp[:20]), proc= proc, v= util.A)
-                if i >= attempts: raise ValueError(proc+ ': Command successful but no neighbors found from %s' % self.ssh_connection.ip)
+                if i >= attempts: raise ValueError(proc+ ': Command successful but no neighbors found from %s' % self.connection.ip)
                 continue
             else:
                 log('CDP neighbors found: {}'.format(neighbor_count), proc= proc, v= util.NORMAL)
@@ -277,8 +277,11 @@ class cisco_device(network_device):
         # Returns none if no matches were found (such as when the interface is "Switch"
         if not output: return None
         
+        # Escape any problematic strings (like Gig0/0.100)
+        output= [re.escape(x) for x in output]
+        
         # Match expanded interface names
-        p = re.compile(r'^' + output[0] + r'.*?' + output[1], re.I)
+        p = re.compile('^' + output[0] + '.*?' + output[1], re.I)
         
         # Check if the mac's interface name matches an interface
         for interf in self.interfaces:
@@ -290,7 +293,7 @@ class cisco_device(network_device):
                 return interf 
         
         # If no match was found return false
-        self.alert('No interface match for {}'.format(partial), proc= proc)
+        self.alert('No interface match for {}'.format(partial), proc= proc, failed= False)
         return None
                     
         

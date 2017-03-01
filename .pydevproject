@@ -8,5 +8,7 @@
 
 <pydev_pathproperty name="org.python.pydev.PROJECT_EXTERNAL_SOURCE_PATH">
 <path>E:\Documents\Scripts</path>
+<path>C:\Users\Wyko\git\netmiko\netmiko</path>
+<path>C:\Users\Wyko\git\netmiko</path>
 </pydev_pathproperty>
 </pydev_project>

@@ -1,9 +1,10 @@
-from ssh_dispatcher import ConnectHandler
+from device_dispatcher import create_instantiated_device
 from datetime import datetime
 from gvars import TIME_FORMAT
 from util import log
 import sqlite3
 import util
+from netmiko.ssh_autodetect import SSHDetect
 
 
 
@@ -24,6 +25,8 @@ class sql_writer():
 
     def ip_exists(self, ip, table):
         '''Check if a given IP exists in the database'''
+        if ip is None or table is None:
+            raise ValueError('No IP or Table given')
         
         self.cur.execute('''
             select exists 
@@ -115,6 +118,12 @@ class neighbor_db(sql_writer):
     
     
     def set_processed(self, _id):
+        proc= 'io_sql.set_processed'
+        
+        # Error checking
+        assert isinstance(_id, int), (
+            proc+ ': _id [{}] is not int'.format(type(_id)))
+          
         # Set the entry as not being worked on and not pending
         result= self.cur.execute('''
             UPDATE Neighbor SET 
@@ -147,9 +156,11 @@ class neighbor_db(sql_writer):
             # Mark the new entry as being worked on 
             self.cur.execute('UPDATE Neighbor SET working=1 WHERE id=?', (output['id'],))
             self.db.commit()
+
+            output = dict(output)
             
-            # Create the network device
-            return ConnectHandler(**dict(output))
+            # Create the network device            
+            return output
         
         else:
             return None
@@ -250,7 +261,7 @@ class neighbor_db(sql_writer):
         proc= 'io_sql.neighbor_db.add_device_neighbors'
         if not _list: _list= []
         
-        log('Adding neighbors to database', proc= proc,
+        log('Adding neighbors to Neighbor table', proc= proc,
             v= util.N)
         
         # If a single device was passed, add it to the list
@@ -317,9 +328,9 @@ class visited_db(sql_writer):
     def add_device_d(self, device_d= None, **kwargs):
         
         _device_d = {
-            'device_name': '',
-            'ip': '',
-            'serialnum': '',
+            'device_name': None,
+            'ip': None,
+            'serialnum': None,
             }
      
         # If a dict was supplied, add values from it into the template
@@ -622,6 +633,7 @@ class device_db(sql_writer):
                 subnet,
                 virtual_ip,
                 description,
+                raw_interface,
                 updated
                 )
             VALUES (
@@ -633,6 +645,7 @@ class device_db(sql_writer):
                 :subnet,
                 :virtual_ip,
                 :description,
+                :raw_interface,
                 :updated
                 );''',
             {
@@ -644,6 +657,7 @@ class device_db(sql_writer):
             'subnet': interf.interface_subnet,
             'virtual_ip': interf.virtual_ip,
             'description': interf.interface_description,
+            'raw_interface': interf.raw_interface,
             'updated': datetime.now().strftime(TIME_FORMAT)
             })
         return sql_writer.last_id(self, 'Interfaces')
@@ -813,6 +827,7 @@ class device_db(sql_writer):
                 subnet             TEXT,
                 virtual_ip         TEXT,
                 description        TEXT,
+                raw_interface      TEXT,
                 updated            TEXT,
                 FOREIGN KEY(device_id) REFERENCES Devices(device_id) 
                     ON DELETE CASCADE ON UPDATE CASCADE

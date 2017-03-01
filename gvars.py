@@ -15,8 +15,9 @@ DELAY_INCREASE = 0.3
 BASE_DELAY = 1
 
 # Set to false to get full tracebacks
-SUPPRESS_ERRORS = True
+SUPPRESS_ERRORS = False
 
+CRED_LIST = []
 
 RUN_PATH = current_file_dir + '/runtime/' 
 MAIN_DB_PATH = RUN_PATH + 'main.db'

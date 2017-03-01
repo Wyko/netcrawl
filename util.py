@@ -66,7 +66,27 @@ def is_ip(raw_input):
         return True
     else:
         return False
+
+
+def netmask_to_cidr(netmask):
+    return sum([bin(int(x)).count("1") for x in netmask.split(".")])
     
+    
+def cidr_to_netmask(cidr):
+    '''Changes CIDR notation to subnet masks. 
+    I honestly have no idea how this works. I
+    just added some error checking.'''
+    
+    # Strip any non digit characters
+    if type(cidr) == str: 
+        cidr= int(re.sub(r'\D', '', str(cidr)))
+    else: cidr= int(cidr)
+    
+    if not (0 <= cidr <= 32):
+        raise ValueError('Input CIDR not recognized as a valid netmask')
+     
+    return '.'.join([str((0xffffffff << (32 - cidr) >> i) & 0xff)
+                    for i in [24, 16, 8, 0]])
 
 def log(msg, 
         ip='', 

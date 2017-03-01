@@ -29,13 +29,16 @@ class ios_device(cisco_device):
         for interf in raw_interfaces:
             i = interface()
             
+            # Add the raw config data to the interface
+            i.raw_interface = interf
+            
             try: output= re.search(r'''
                 ^\s*?            # Beginning of a line, with whitespace
                 interf.*?        # The word interface, followed by some characters
                 \b               # A word boundry
                 (                # The full interface name capture group
                 ([A-Za-z]{2,})   # An interface name, consisting of at least 2 letters
-                ([\d\/]+)        # The interface number, with potential backslashes
+                ([\d\/\.]+)        # The interface number, with potential backslashes and .'s
                 )$
             ''', interf, re.I | re.X | re.M) 
             except: continue
