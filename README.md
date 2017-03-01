@@ -6,9 +6,11 @@ This package is still in development.
 
 ## Usage
 
+```
 NetCrawl [-h] [-v LEVEL] [-r] [-c] [-sd] [-sR | -sS | -sN] [-t TARGET] [-p PLATFORM]
 
-This package will process a specified host and pull information from it. If desired, it can then crawl the device's neighbors recursively and continue the process.
+This package will process a specified host and pull information from it. 
+If desired, it can then crawl the device's neighbors recursively and continue the process.
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -46,7 +48,7 @@ Target Specification:
   -t TARGET, --target TARGET
                         Hostname or IP address of the starting device
   -p PLATFORM           The Netmiko platform for the device
-
+```
 
 ## Getting Started
 
