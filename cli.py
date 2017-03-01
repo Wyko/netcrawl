@@ -1,148 +1,124 @@
-from netmiko import ConnectHandler
+'''
+Created on Feb 28, 2017
+
+@author: Wyko
+'''
+
+from util import log, port_is_open, getCreds
 from netmiko import NetMikoAuthenticationException
 from netmiko import NetMikoTimeoutException
-from util import log, port_is_open
+import gvars, util
 
-from time import sleep
-
-import util
-
-def getCreds():
-    """Get stored credentials using a the credentials module. 
-    Requests credentials via prompt otherwise.
-    
-    Returns:
-        List of Dicts: {username, password, type} If the username and password 
-            had to be requested, the list will only have one entry.
-    """
-    
-    try: from credentials import credList
-    except ImportError: pass
-    else: 
-        if len(credList) > 0: return credList
-    
-    # If no credentials could be acquired the other way, get them this way.
-    import getpass
-    username = input("Username: ")
-    password = getpass.getpass("Password: ")
-    return [{'user': username, 'password': password, 'type': 'User Entered'}]  
-        
-
-
-
-        
-def start_cli_session(ip, platform, global_delay_factor = 1):
+def start_cli_session(handler= None,
+                      netmiko_platform= None,
+                      ip= None, 
+                      cred= None, 
+                      port= None):
     """
     Starts a CLI session with a remote device. Will attempt to use
     SSH first, and if it fails it will try a terminal session.
     
-    Args:
-        ip (string): IP address of the device
-        username (string): Username used for the authentication
-        password (string): Password used for the authentication
-        enable_secret (string): The enable password
-        platform (string): One of the following netmiko platforms:
-            cisco_ios
-            cisco_asa
-            cisco_nxos
-    
-    Optional Args: 
-        global_delay_factor (float): A number by which timeouts are multiplied
+    Optional Args:
+        cred (Dict): If supplied. this method will only use the specified credential
+        port (Integer): If supplied, this method will connect only on this port 
+        ip (String): The IP address to connect to
+        netmiko_platform (Object): The platform of the device 
+        handler (Object): A Netmiko-type ConnectionHandler to use. Currently using
+            one of Netmiko.ConnectHandler, Netmiko.ssh_autodetect.SSHDetect. 
+            Uses Netmiko.ConnectHandler by default.
     
     Returns: 
         Dict: 
-            'ssh_connection': Netmiko ConnectHandler object opened to the enable prompt 
+            'connection': Netmiko ConnectHandler object opened to the enable prompt 
             'TCP_22': True if port 22 is open
             'TCP_23': True if port 23 is open
             'cred': The first successful credential dict 
+            
+    Raises:
+        ValueError: If connection could not be established
+        AssertionError: If error checking failed
     """
+    proc= 'cli.start_cli_session'
     
-    log('Connecting to %s device %s' % (platform, ip), ip, proc='start_cli_session', v= util.N)
+    log('Connecting to %s device %s' % (netmiko_platform, ip), ip, proc= proc, v= util.I)
     
-    # Get the username and password
-    credList = getCreds()
+    assert isinstance(ip, str), proc+ ': Ip [{}] is not a string.'.format(type(ip)) 
     
-    sleep(1)
-    t22 = port_is_open(22, ip)
-    sleep(1)
-    t23 = port_is_open(23, ip)
+    result= {
+            'TCP_22': port_is_open(22, ip),
+            'TCP_23': port_is_open(23, ip),
+            'connection': None, 
+            'cred': None,
+            }
     
-    result_set= {
-        'ssh_connection': None,
-        'TCP_22': t22,
-        'TCP_23': t23,
-        'cred': None,
-        }
+    # Get credentials if none were acquired yet
+    if len(gvars.CRED_LIST) == 0: gvars.CRED_LIST= getCreds()
+    
+    # Error checking        
+    assert len(gvars.CRED_LIST) > 0, 'No credentials available'
+    if port: assert port is 22 or port is 23, 'Invalid port number [{}]. Should be 22 or 23.'.format(str(port))
+    if cred: assert isinstance(cred, dict), 'Cred is type [{}]. Should be dict.'.format(type(cred))
+
+    # Switch between global creds or argument creds
+    if cred: _credList= cred
+    else: _credList= gvars.CRED_LIST
     
     # Check to see if SSH (port 22) is open
-    if not result_set['TCP_22']:
-        log('Port 22 is closed on %s' % ip, ip, proc='start_cli_session', v= util.A)
-    else: 
+    if not result['TCP_22']:
+        log('Port 22 is closed on %s' % ip, ip, proc= proc, v= util.I)
+    elif port is None or port is 22: 
         # Try logging in with each credential we have
-        for _cred in credList:
-            cred= dict(_cred)
+        for cred in _credList:
             try:
                 # Establish a connection to the device
-                ssh_connection = ConnectHandler(
-                    device_type=platform,
-                    ip=ip,
+                result['connection'] = handler(
+                    device_type=netmiko_platform,
+                    ip=  ip,
                     username= cred['user'],
                     password= cred['password'],
                     secret= cred['password'],
-                    global_delay_factor=global_delay_factor
                 )
-                log('Successful ssh auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), proc='start_cli_session', v= util.N)
                 
-                # Trim the password in the output for some semblance of security
-                cred['password']= cred['password'][:2]
-                result_set.update({
-                    'cred': cred,
-                    'ssh_connection': ssh_connection
-                    })
-
-                return result_set
+                result['cred']= cred
+                log('Successful ssh auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), proc= proc, v= util.N)
+                
+                return result
     
             except NetMikoAuthenticationException:
-                log ('SSH auth error to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), proc='start_cli_session', v= util.A)
+                log ('SSH auth error to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), proc= proc, v= util.A)
                 continue
             except NetMikoTimeoutException:
-                log('SSH to %s timed out.' % ip, proc='start_cli_session', v= util.A)
+                log('SSH to %s timed out.' % ip, proc= proc, v= util.A)
                 # If the device is unavailable, don't try any other credentials
                 break
     
     # Check to see if port 23 (telnet) is open
-    if not result_set['TCP_23']:
-        log('Port 23 is closed on %s' % ip, ip, proc='start_cli_session', v= util.A)
-    else:
-        for cred in credList:
+    if not result['TCP_23']:
+        log('Port 23 is closed on %s' % ip, ip, proc= proc, v= util.I)
+    elif port is None or port is 23:
+        for cred in _credList:
             try:
-                # Establish a connection to the device using telnet
-                ssh_connection = ConnectHandler(
-                    device_type=platform + '_telnet',
-                    ip=ip,
-                    username=cred['user'],
-                    password=cred['password'],
-                    secret=cred['password']
+                # Establish a connection to the device
+                result['connection'] = handler(
+                    device_type=netmiko_platform + '_telnet',
+                    ip=  ip,
+                    username= cred['user'],
+                    password= cred['password'],
+                    secret= cred['password'],
                 )
-                log('Successful telnet auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), proc='start_cli_session', v= util.N)
                 
+                result['cred']= cred
+                log('Successful ssh auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), proc= proc, v= util.N)
                 
-                # Trim the password in the output for some semblance of security
-                cred['password']= cred['password'][:2]
-                result_set.update({
-                    'cred': cred,
-                    'ssh_connection': ssh_connection
-                    })
-
-                return result_set
+                return result
             
             except NetMikoAuthenticationException:
                 log('Telnet auth error to %s using %s, %s' % 
-                    (ip, cred['user'], cred['password'][:2]), v= util.A, proc= 'start_cli_session')
+                    (ip, cred['user'], cred['password'][:2]), v= util.A, proc= proc)
                 continue
             except:
-                log('Telnet to %s timed out.' % ip, proc='start_cli_session', v= util.A)
+                log('Telnet to %s timed out.' % ip, proc= proc, v= util.A)
                 # If the device is unavailable, don't try any other credentials
                 break
     
-    return result_set
+    raise IOError('No CLI connection could be established')

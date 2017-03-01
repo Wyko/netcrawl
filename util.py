@@ -15,16 +15,49 @@ HIGH = 3
 H = 3
 NORMAL = 4
 N = 4
-DEBUG = 5
-D = 5
+INFORMATIONAL = 5
+I = 5
+DEBUG = 6
+D = 6
 
+
+def getCreds():
+    """Get stored credentials using a the credentials module. 
+    Requests credentials via prompt otherwise.
+    
+    Returns:
+        List of Dicts: {username, password, type} If the username and password 
+            had to be requested, the list will only have one entry.
+    """
+    
+    try: from credentials import credList
+    except ImportError: pass
+    else: 
+        if len(credList) > 0: return credList
+    
+    # If no credentials could be acquired the other way, get them this way.
+    import getpass
+    username = input("Username: ")
+    password = getpass.getpass("Password: ")
+    return [{'user': username, 'password': password, 'type': 'User Entered'}]  
 
 
 def parse_ip(raw_input):
-    """Returns the first IP address matched in the input string. None if 
-    nothing matched.
-    """
-    return re.findall(r"(1[0-9]{1,3}(?:\.\d{1,3}){3})", raw_input)
+    """Returns a list of strings containing each IP address 
+    matched in the input string."""
+    return re.findall(r'''
+        \b                        # Start at a word boundry
+        (?:
+            (?:
+                25[0-5]|          # Match 250-255
+                2[0-4][0-9]|      # Match 200-249
+                [01]?[0-9][0-9]?  # Match 0-199
+            )
+            (?:\.|\b)             # Followed by a . or a word boundry
+        ){4}                      # Repeat that four times
+        \b                        # End at a word boundry
+        ''', raw_input, re.X)
+
 
 def is_ip(raw_input):
     output = re.search(r"(^1[0-9]{1,3}(?:\.\d{1,3}){3}$)", raw_input)
@@ -33,7 +66,27 @@ def is_ip(raw_input):
         return True
     else:
         return False
+
+
+def netmask_to_cidr(netmask):
+    return sum([bin(int(x)).count("1") for x in netmask.split(".")])
     
+    
+def cidr_to_netmask(cidr):
+    '''Changes CIDR notation to subnet masks. 
+    I honestly have no idea how this works. I
+    just added some error checking.'''
+    
+    # Strip any non digit characters
+    if type(cidr) == str: 
+        cidr= int(re.sub(r'\D', '', str(cidr)))
+    else: cidr= int(cidr)
+    
+    if not (0 <= cidr <= 32):
+        raise ValueError('Input CIDR not recognized as a valid netmask')
+     
+    return '.'.join([str((0xffffffff << (32 - cidr) >> i) & 0xff)
+                    for i in [24, 16, 8, 0]])
 
 def log(msg, 
         ip='', 
@@ -85,7 +138,7 @@ def log(msg,
                 )
     
     # Print the message to console            
-    if v <= VERBOSITY and print_out: print('{:<25.25}: {}'.format(proc, msg))
+    if v <= VERBOSITY and print_out: print('{:<35.35}: {}'.format(proc, msg))
     
     if not os.path.exists(log_path):
         os.makedirs(log_path)
