@@ -4,11 +4,11 @@ Created on Feb 18, 2017
 @author: Wyko
 '''
 
-from util import log
-import re, util
 from Devices.cisco_device import cisco_device
 from Devices.base_device import interface
+from wylog import log
 
+import re
 
 class nxos_device(cisco_device):
     
@@ -17,7 +17,7 @@ class nxos_device(cisco_device):
         '''Returns serials based on XML output'''
         proc= 'nxos_device.get_serials'
         
-        log('Starting to get serials', proc= proc, v= util.I)
+        log('Starting to get serials', proc= proc, v= log.I)
         
         output= self.attempt('show inv | xml | sec <ROW_inv>', 
              proc= proc, 
@@ -27,7 +27,7 @@ class nxos_device(cisco_device):
         self.serial_numbers= [{x: y for (x, y) in re.findall(r'<(.+?)>(.*?)<\/\1>', entry, re.I)} 
                     for entry in re.split(r'<RoW_inv>', output, flags=(re.I|re.M)) if entry.strip()]
         
-        log('Serials found: {}.'.format(len(self.serial_numbers)), proc= proc, v= util.N)
+        log('Serials found: {}.'.format(len(self.serial_numbers)), proc= proc, v= log.N)
 
     
     def get_interfaces(self):
@@ -36,14 +36,14 @@ class nxos_device(cisco_device):
         try: self.get_interfaces_xml()
         except: 
             log('XML parsing failed. Attempting config parsing.',
-                proc= proc, v= util.I)
+                proc= proc, v= log.I)
             self.get_interfaces_config()
         
         
     def get_interfaces_xml(self):
         proc='nxos_device.get_interfaces_xml'
         
-        log('Getting XML interface data', proc= proc, v= util.I)
+        log('Getting XML interface data', proc= proc, v= log.I)
         
         # Poll the device for interfaces
         output= self.attempt('show interface | xml | sec ROW_interface', 
@@ -87,10 +87,10 @@ class nxos_device(cisco_device):
         
         if len(interfaces) > 0:
             log('Interfaces found: {}.'.format(
-                len(interfaces)), proc= proc, v= util.N)  
+                len(interfaces)), proc= proc, v= log.N)  
             
         else:
-            log('No interfaces found', proc= proc, v= util.C)
+            log('No interfaces found', proc= proc, v= log.C)
             raise ValueError(proc+ ': No interfaces found.')     
             
         self.merge_interfaces(interfaces)
@@ -101,7 +101,7 @@ class nxos_device(cisco_device):
     def get_interfaces_config(self):
         proc= 'nxos_device.get_interfaces_config'
         
-        log('Getting config interface data', proc= proc, v= util.I)
+        log('Getting config interface data', proc= proc, v= log.I)
         
         # If no device config was passed, return it now
         if self.config == '': return
@@ -147,11 +147,11 @@ class nxos_device(cisco_device):
     
         if len(interfaces) > 0:
             log('Interfaces found: {}'.format(
-                len(interfaces)), proc= proc, v= util.N)  
+                len(interfaces)), proc= proc, v= log.N)  
             
         else:
             log('No interfaces found. Raw_interfaces was: {}'.format(
-                raw_interfaces), proc= proc, v= util.C)
+                raw_interfaces), proc= proc, v= log.C)
             raise ValueError(proc+ ': No interfaces found.')                
         
         # Merge the interfaces into the device interfaces

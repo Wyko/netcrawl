@@ -4,10 +4,12 @@ Created on Feb 28, 2017
 @author: Wyko
 '''
 
-from util import log, port_is_open, getCreds
 from netmiko import NetMikoAuthenticationException
 from netmiko import NetMikoTimeoutException
-import gvars, util
+from util import port_is_open, getCreds
+from wylog import log
+
+import gvars
 
 def start_cli_session(handler= None,
                       netmiko_platform= None,
@@ -40,7 +42,7 @@ def start_cli_session(handler= None,
     """
     proc= 'cli.start_cli_session'
     
-    log('Connecting to %s device %s' % (netmiko_platform, ip), ip, proc= proc, v= util.I)
+    log('Connecting to %s device %s' % (netmiko_platform, ip), ip, proc= proc, v= log.I)
     
     assert isinstance(ip, str), proc+ ': Ip [{}] is not a string.'.format(type(ip)) 
     
@@ -65,9 +67,9 @@ def start_cli_session(handler= None,
     
     # Check to see if SSH (port 22) is open
     if not result['TCP_22']:
-        log('Port 22 is closed on %s' % ip, ip, proc= proc, v= util.I)
+        log('Port 22 is closed on %s' % ip, ip, proc= proc, v= log.I)
     elif port is None or port is 22: 
-        # Try logging in with each credential we have
+        # Try wylog in with each credential we have
         for cred in _credList:
             try:
                 # Establish a connection to the device
@@ -80,21 +82,21 @@ def start_cli_session(handler= None,
                 )
                 
                 result['cred']= cred
-                log('Successful ssh auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), proc= proc, v= util.N)
+                log('Successful ssh auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), proc= proc, v= log.N)
                 
                 return result
     
             except NetMikoAuthenticationException:
-                log ('SSH auth error to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), proc= proc, v= util.A)
+                log ('SSH auth error to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), proc= proc, v= log.A)
                 continue
             except NetMikoTimeoutException:
-                log('SSH to %s timed out.' % ip, proc= proc, v= util.A)
+                log('SSH to %s timed out.' % ip, proc= proc, v= log.A)
                 # If the device is unavailable, don't try any other credentials
                 break
     
     # Check to see if port 23 (telnet) is open
     if not result['TCP_23']:
-        log('Port 23 is closed on %s' % ip, ip, proc= proc, v= util.I)
+        log('Port 23 is closed on %s' % ip, ip, proc= proc, v= log.I)
     elif port is None or port is 23:
         for cred in _credList:
             try:
@@ -108,16 +110,16 @@ def start_cli_session(handler= None,
                 )
                 
                 result['cred']= cred
-                log('Successful ssh auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), proc= proc, v= util.N)
+                log('Successful ssh auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), proc= proc, v= log.N)
                 
                 return result
             
             except NetMikoAuthenticationException:
                 log('Telnet auth error to %s using %s, %s' % 
-                    (ip, cred['user'], cred['password'][:2]), v= util.A, proc= proc)
+                    (ip, cred['user'], cred['password'][:2]), v= log.A, proc= proc)
                 continue
             except:
-                log('Telnet to %s timed out.' % ip, proc= proc, v= util.A)
+                log('Telnet to %s timed out.' % ip, proc= proc, v= log.A)
                 # If the device is unavailable, don't try any other credentials
                 break
     

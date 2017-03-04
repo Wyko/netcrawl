@@ -1,21 +1,17 @@
 from datetime import datetime
 from gvars import TIME_FORMAT
+from wylog import log
 from retrying import retry
-from wylog import log, logf, logging
 
-import psycopg2, wylog
-
-retry_args= {'stop_max_delay': 60000, # Stop after 60 seconds
-             'wait_exponential_multiplier': 100, # Exponential backoff
-             'wait_exponential_max': 10000,
-#             'retry_on_exception': ( # Only retry on this exception
-#                 lambda x: isinstance(x, sqlite3.OperationalError)
-#                 )
-             }
+import sqlite3, util
 
 class sql_database():
     def __init__(self, dbname, **kwargs):
-        self.conn = psycopg2.connect(dbname=dbname, user='wyko', password='pass', host='localhost')
+        self.db = sqlite3.connect(dbname, timeout=15)  # @UndefinedVariable
+        self.db.row_factory = sqlite3.Row  # @UndefinedVariable
+        self.cur = self.db.cursor()
+        
+#         self.cur.execute('PRAGMA journal_mode=wal')
         
         # Create the tables in each database, overwriting if needed
         clean= kwargs.get('clean', False)
@@ -23,8 +19,10 @@ class sql_database():
         
     
     def close(self):
-        if not self.conn.closed: self.db.close()
+        if self.db: self.db.close()
         
+    
+
 
     def ip_exists(self, ip, table):
         '''Check if a given IP exists in the database'''
@@ -32,144 +30,158 @@ class sql_database():
             raise ValueError('IP[{}] or Table[{]] missing'.format(
                 ip, table))
         
-        with self.conn.cursor() as cur:
-            cur.execute('''
-                select exists 
-                (select * from %(table)s where ip= %(ip)s limit 1);''',
-                {'table': table, 'ip': ip}
-                )
-            output = cur.fetchone()
-            
-        return bool(output)
+        self.cur.execute('''
+            select exists 
+            (select * from {} where ip='{}' limit 1);'''.format(table, ip))
+        output = self.cur.fetchone()
+        
+        if output and output[0] == 1: return True
+        else: return False
         
         
     def ip_name_exists(self, ip, name, table):
         '''Check if a given IP OR Name exists in the database'''
-        with self.conn.cursor() as cur:
-            cur.execute('''
-                select exists 
-                    (select * from %(table)s 
-                    where 
-                        ip= %(ip)s 
-                        OR 
-                        device_name= %(device)s
-                    limit 1);''',
-                {'table': table, 'ip': ip, 'device': name})
-            output = cur.fetchone()
         
-        return bool(output)
+        self.cur.execute('''
+            select exists 
+                (select * from {} 
+                where 
+                    ip='{}' 
+                    OR 
+                    device_name='{}'
+                limit 1);'''.format(table, ip, name))
+        output = self.cur.fetchone()
+        
+        if output and output[0] == 1: return True
+        else: return False    
         
     
     def count(self, table):
         '''Counts the number of rows in the table'''
         proc= 'io_sql.count'
+        self.cur.execute('SELECT count(id) from {};'.format(table) )
+        return self.cur.fetchone()[0]
+
+
+    def last_id(self, table):
+        '''Get the next entry ID in the table. Make sure a valid ID was 
+        returned and then increment by one.
+        '''
+        proc= 'io_sql.sql_database.last_id'
+        # Get the last row number in the table
+        self.cur.execute('select seq from sqlite_sequence where name="{}";'.format(table))
+        _id = self.cur.fetchone()
         
-        with self.conn.cursor() as cur:
-            cur.execute('SELECT count(*) as exact_count from %s;', 
-                        (table,) )
-            return cur.fetchone()[0]
+        # If it was returned, increment by one
+        if _id and _id[0]: 
+            log('Last entry placed at id {} in {}'.format(_id[0], table),
+                proc= proc, v= log.D)
+            return int(_id[0])
+        else: 
+            log('No valid ID returned in table: {}'.format(table), 
+                proc= proc, v= log.C)
+            return None
+        
 
 
-class main_db(sql_database):
+class neighbor_db(sql_database):
+    TABLE_NAME = 'Neighbor'
     
-    def __init__(self, **kwargs):
-        proc= 'main_db.__init__'
-        
-        self.DB_NAME = 'main'
-        sql_database.__init__(self, self.DB_NAME, **kwargs)
+    retry_args= {'stop_max_delay': 60000, # Stop after 60 seconds
+                 'wait_exponential_multiplier': 100, # Exponential backoff
+                 'wait_exponential_max': 10000,
+                 'retry_on_exception': ( # Only retry on this exception
+                     lambda x: isinstance(x, sqlite3.OperationalError)
+                     )
+                 }
+    
+    def __init__(self, dbname, **kwargs):
+        sql_database.__init__(self, dbname, **kwargs)
+        proc= 'neighbor_db.__init__'
         
         self.resume = kwargs.get('resume', True)
-        
-        with self.con.cursor() as cur:
-            # If resuming, then reset the working tag for 
-            # any existing pending devices
-            if self.resume:
-                cur.execute('''
-                    UPDATE pending 
-                    SET
-                        working= 0
-                ''')
-            else:
-                # Otherwise, delete everything in the table
-                cur.execute('''
-                    DELETE FROM pending
-                ''')
+
+        # If resuming, then set everything as not working
+        if self.resume:
+            self.cur.execute('''
+                UPDATE Neighbor 
+                SET
+                    working= 0
+            ''')
+        else:
+            # Otherwise, reset the working and pending tag
+            self.cur.execute('''
+                UPDATE Neighbor 
+                SET
+                    pending= 0,
+                    working= 0
+            ''')
+        self.db.commit()
 
     
     def __len__(self):
-        return sql_database.count(self, self.DB_NAME)
+        return sql_database.count(self, self.TABLE_NAME)
     
     def ip_exists(self, ip):
-        return sql_database.ip_exists(self, ip, self.DB_NAME)
+        return sql_database.ip_exists(self, ip, self.TABLE_NAME)
     
     def count_pending(self):
         '''Counts the number of rows in the table'''
-        return sql_database.count(self, 'pending')
+        self.cur.execute('SELECT count(device_id) from Neighbor WHERE pending=1;')
+        return self.cur.fetchone()[0]
     
-    def count_unique_visited(self):
-        '''Counts the number of unique devices in the database'''
-        with self.conn.cursor() as cur:
-            cur.execute('''
-                SELECT count(distinct device_name) 
-                FROM visited;''')
-        return cur.fetchone()[0]
     
-    def remove_record(self, device_id):
-        '''Removes a processed record from the pending table''' 
-        proc= 'main_db.remove_processed'
+    @retry(**retry_args)
+    def set_processed(self, _id):
+        proc= 'io_sql.set_processed'
         
         # Error checking
-        assert isinstance(device_id, int), (
-            proc+ ': _id [{}] is not int'.format(type(device_id)))
+        assert isinstance(_id, int), (
+            proc+ ': _id [{}] is not int'.format(type(_id)))
         
-        # Delete the processed entry
-        with self.conn.cursor() as cur:
-            cur.execute('''
-                DELETE FROM 
-                    pending
-                WHERE
-                    device_id = %s
-                ''', (device_id, ))
+        # Set the entry as not being worked on and not pending
+        result= self.cur.execute('''
+            UPDATE Neighbor SET 
+                pending= 0,
+                working= 0
+            WHERE
+                device_id = ?
+            ''', (_id, ))
+        self.db.commit()
         
-
+        
+        
+    @retry(**retry_args)
     def get_next(self):
-        '''Gets the next pending device.
-        
-        Returns: 
-            Dict: The next pending device as a dictionary object
-                with the names of the rows as keys.
+        '''Returns the next pending neighbor entry as
+        an appropriately inherited network_device.
         '''
-        proc= 'main_db.get_next'
-
-        with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:        
-            cur.execute('''
-                SELECT * FROM 
-                    pending 
-                WHERE 
-                    working= 0 
-                ORDER BY device_id ASC LIMIT 1
-                ''')
-            output = cur.fetchone()
+        proc= 'neighbor_db.get_next'
         
-            if output:
-                
-                # Mark the new entry as being worked on 
-                cur.execute('''
-                    UPDATE pending 
-                    SET working= 1 
-                    WHERE device_id= %s
-                    ''', 
-                    (output['device_id'], ))
-                
-                # Return the next device
-                output = dict(output)
-                return output
+        self.cur.execute('''
+            SELECT * FROM 
+                Neighbor 
+            WHERE 
+                pending= 1 AND
+                working= 0 
+            ORDER BY device_id ASC LIMIT 1
+            ''')
             
-            else: return None
+        output = self.cur.fetchone()
+        
+        if output:
+            
+            # Mark the new entry as being worked on 
+            self.cur.execute('UPDATE Neighbor SET working=1 WHERE device_id=?', (output['device_id'],))
+            self.db.commit()
+            output = dict(output)
+            return output
+        
+        else: return None
     
     
     def add_device_d(self, device_d= None, **kwargs):
-        proc= 'io_sql.main_db.add_device_d'
+        proc= 'io_sql.neighbor_db.add_device_d'
         
         # Neighbor dict template
         _device_d = {
@@ -206,7 +218,7 @@ class main_db(sql_database):
         else: pending = 0
         
         try:
-            cur.execute('''
+            self.cur.execute('''
                 INSERT INTO Neighbor  
                     (
                     working,
@@ -238,16 +250,16 @@ class main_db(sql_database):
                 ))
             self.db.commit()
             
-        except Exception as e:  # @UndefinedVariable
+        except sqlite3.IntegrityError as e:  # @UndefinedVariable
             log('Duplicate IP rejected: {}'.format(_device_d['ip']), 
                 proc= proc, error= e, 
-                v= logging.D)
+                v= log.D)
             return False
         
         else:
             log('Device added to Neighbor table: {}'.format(_device_d['ip']), 
                 proc= proc, 
-                v= logging.D)
+                v= log.D)
     
     
     def add_device_neighbors(self, _device= None, _list= None):
@@ -260,18 +272,18 @@ class main_db(sql_database):
         Returns:
             Boolean: True if write was successful, False otherwise.
         """
-        proc= 'io_sql.main_db.add_device_neighbors'
+        proc= 'io_sql.neighbor_db.add_device_neighbors'
         if not _list: _list= []
         
         log('Adding neighbors to Neighbor table', proc= proc,
-            v= logging.N)
+            v= log.N)
         
         # If a single device was passed, add it to the list
         if _device: _list.append(_device)
         
         # Return an error if no data was passed
         if not _list: 
-            log('No devices to add', proc= proc, v= logging.A)
+            log('No devices to add', proc= proc, v= log.A)
             return False
         
         
@@ -287,7 +299,7 @@ class main_db(sql_database):
                         self.add_device_d(neighbor)
                 else:
                     log('Neighbor does not have a valid ip. Neighbor: [{}]'.format(
-                        neighbor), proc= proc, v= logging.A)
+                        neighbor), proc= proc, v= log.A)
                     
         self.db.commit()
         return True
@@ -295,58 +307,44 @@ class main_db(sql_database):
 
     
     def create_table(self, drop_tables= True):
-        proc= 'main_db.create_table'
-        log('Creating main.db tables',
-            proc= proc, v= logging.I)
+        proc= 'neighbor_db.create_table'
         
-        with self.con.cursor() as cur:
-            if drop_tables: 
-                cur.execute('''
-                    DROP TABLE IF EXISTS pending;
-                    DROP TABLE IF EXISTS visited;
-                    ''')
-                
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS pending(
-                device_id          INTEGER PRIMARY KEY , 
-                ip                 TEXT NOT NULL,
-                working            BOOLEAN NOT NULL,
-                device_name        TEXT,
-                netmiko_platform   TEXT,
-                system_platform    TEXT,
-                source_interface   TEXT,
-                neighbor_interface TEXT,
-                software           TEXT,
-                raw_cdp            TEXT,
-                updated            TEXT
-                );
-                
-                CREATE TABLE IF NOT EXISTS visited(
-                id             INTEGER PRIMARY KEY, 
-                ip             TEXT UNIQUE,
-                device_name    TEXT,
-                serial         TEXT,
-                updated        TEXT
-                );
-                ''')
+        if drop_tables: self.db.execute('DROP TABLE IF EXISTS Neighbor;')
+        self.db.execute('''
+            CREATE TABLE IF NOT EXISTS Neighbor(
+            device_id          INTEGER PRIMARY KEY AUTOINCREMENT, 
+            ip                 TEXT NOT NULL,
+            pending            INTEGER NOT NULL,
+            working            INTEGER NOT NULL,
+            device_name        TEXT,
+            netmiko_platform   TEXT,
+            system_platform    TEXT,
+            source_interface   TEXT,
+            neighbor_interface TEXT,
+            software           TEXT,
+            raw_cdp            TEXT,
+            updated            TEXT
+            );
+            ''')
+        self.db.commit()
 
 
         
 
 class visited_db(sql_database):
-    DB_NAME= 'Visited'
+    TABLE_NAME= 'Visited'
     
     def __init__(self, dbname, **kwargs):
         sql_database.__init__(self, dbname, **kwargs)
     
     def __len__(self):
-        return sql_database.count(self, self.DB_NAME)
+        return sql_database.count(self, self.TABLE_NAME)
     
     def ip_exists(self, ip):
-        return sql_database.ip_exists(self, ip, self.DB_NAME)
+        return sql_database.ip_exists(self, ip, self.TABLE_NAME)
     
     def ip_name_exists(self, ip, name):
-        return sql_database.ip_name_exists(self, ip, name, self.DB_NAME)
+        return sql_database.ip_name_exists(self, ip, name, self.TABLE_NAME)
     
     def add_device_d(self, device_d= None, **kwargs):
         proc= 'visited_db.add_device_d'
@@ -375,7 +373,7 @@ class visited_db(sql_database):
                 (_device_d['ip'] is not None)), proc+ 'No IP in [{}]'.format(_device_d)
         
         try:
-            cur.execute('''
+            self.db.execute('''
                 INSERT INTO Visited  
                     (
                     ip,
@@ -400,11 +398,11 @@ class visited_db(sql_database):
         except sqlite3.IntegrityError:  # @UndefinedVariable
             log('Duplicate IP rejected: {}'.format(_device_d['ip']), 
                 proc= 'visited_db.add_device_d', 
-                v= logging.D)
+                v= log.D)
         else:
             log('Device added to Visited table: {}'.format(_device_d['ip']), 
                 proc= 'visited_db.add_device_d', 
-                v= logging.D)
+                v= log.D)
     
     
     
@@ -420,8 +418,8 @@ class visited_db(sql_database):
         """ 
         if not _list: _list= []
         
-        log('Adding device(s) to {} table.'.format(self.DB_NAME), 
-            proc= 'visited_db.add_device_nd', v= logging.N)
+        log('Adding device(s) to {} table.'.format(self.TABLE_NAME), 
+            proc= 'visited_db.add_device_nd', v= log.N)
         
         # If a single device was passed, add it to the list so that we can
         # simplify the code later on
@@ -430,7 +428,7 @@ class visited_db(sql_database):
         # Return an error if no data was passed
         if not _list: 
             log('No devices to add', proc= 'visited_db.add_device_nd',
-                v= logging.A)
+                v= log.A)
             return False
         
         # Process each device
@@ -439,11 +437,11 @@ class visited_db(sql_database):
             # Get the IP's from the device 
             ip_list = _device.get_ips()
             log('{} has {} ip(s)'.format(_device.device_name, len(ip_list)), 
-                proc='visited_db.add_device_nd', v= logging.I)
+                proc='visited_db.add_device_nd', v= log.I)
             
             # For failed devices which couldn't be fully polled:
             if len(ip_list) ==0:
-                cur.execute('''
+                self.cur.execute('''
                     INSERT INTO Visited  
                         (
                         device_name,
@@ -458,7 +456,7 @@ class visited_db(sql_database):
             for ip in ip_list:
                 
                 try:
-                    cur.execute('''
+                    self.cur.execute('''
                         INSERT INTO Visited  
                             (
                             ip,
@@ -481,34 +479,53 @@ class visited_db(sql_database):
                         ))
                 except sqlite3.IntegrityError:  # @UndefinedVariable
                     log('Duplicate IP rejected: {}'.format(ip), 
-                        proc= 'visited_db.add_device_nd', v= logging.D)
+                        proc= 'visited_db.add_device_nd', v= log.D)
                     continue
                 
         
         self.db.commit()
         log('Added {} devices to visited table'.format(len(_list)), 
-            proc= 'visited_db.add_device_nd', v= logging.I)
+            proc= 'visited_db.add_device_nd', v= log.I)
         return True
     
     
+    def count_unique(self):
+        '''Counts the number of unique devices in the database'''
+        self.cur.execute('''SELECT count(distinct Serial) from Visited''')
+        return self.cur.fetchone()[0]
     
     
+    def create_table(self, drop_tables= True):
+        
+        if drop_tables: self.db.execute('DROP TABLE IF EXISTS Visited;')
+        self.db.execute('''
+            CREATE TABLE IF NOT EXISTS Visited(
+            id             INTEGER PRIMARY KEY AUTOINCREMENT, 
+            ip             TEXT UNIQUE,
+            device_name    TEXT,
+            serial         TEXT,
+            updated        TEXT
+            );
+            ''')
+        self.db.commit()
+
     
 
 class device_db(sql_database):
+    TABLE_NAME = 'Devices'
     
-    def __init__(self, **kwargs):
-        proc= 'device_db.__init__'
+    def __init__(self, dbname, **kwargs):
+        sql_database.__init__(self, dbname, **kwargs)
+        self.cur.execute('PRAGMA foreign_keys = ON;')
+        self.db.commit()
         
-        self.DB_NAME = 'devices'
-        sql_database.__init__(self, self.DB_NAME, **kwargs)
         
     
     def __len__(self):
-        return sql_database.count(self, self.DB_NAME)
+        return sql_database.count(self, self.TABLE_NAME)
     
     def ip_exists(self, ip):
-        return sql_database.ip_exists(self, ip, self.DB_NAME)
+        return sql_database.ip_exists(self, ip, self.TABLE_NAME)
     
     def add_device_nd(self, _device= None, _list= None):
         """Appends a device or a list of devices to the database
@@ -524,12 +541,12 @@ class device_db(sql_database):
         
         # Return an error if no data was passed    
         if not (_list or _device): 
-            log('No devices to add', proc= proc, v= logging.A)
+            log('No devices to add', proc= proc, v= log.A)
             return False
         
         if not _list: _list= []
         
-        log('Adding device(s) to {}'.format(self.DB_NAME), proc= proc, v= logging.N)
+        log('Adding device(s) to {} table'.format(self.TABLE_NAME), proc= proc, v= log.N)
         
         # If a single device was passed, add it for group processing
         if _device: _list.append(_device)
@@ -568,7 +585,7 @@ class device_db(sql_database):
         if _password: _password= _password[:2]
        
         # Add the device into the database
-        cur.execute('''
+        self.cur.execute('''
             INSERT INTO Devices (
                 device_name,
                 unique_name,
@@ -628,7 +645,7 @@ class device_db(sql_database):
     
     
     def insert_interface_entry(self, device_id, interf):
-        cur.execute('''
+        self.cur.execute('''
             INSERT INTO Interfaces (
                 device_id,
                 interface_name,
@@ -670,7 +687,7 @@ class device_db(sql_database):
     
     
     def insert_serial_entry(self, device_id, serial):
-        cur.execute('''
+        self.cur.execute('''
             INSERT INTO Serials (
                 device_id,
                 serialnum,
@@ -703,7 +720,7 @@ class device_db(sql_database):
     
     
     def insert_neighbor_ip_entry(self, neighbor_id, ip):
-        cur.execute('''
+        self.cur.execute('''
             INSERT INTO Neighbor_IPs
             (
                 neighbor_id,
@@ -726,7 +743,7 @@ class device_db(sql_database):
     
     
     def insert_neighbor_entry(self, device_id, interface_id, neighbor):
-        cur.execute('''
+        self.cur.execute('''
             INSERT INTO Neighbors
             (
                 device_id,
@@ -769,7 +786,7 @@ class device_db(sql_database):
      
     
     def insert_mac_entry(self, device_id, interface_id, mac_address):
-        cur.execute('''
+        self.cur.execute('''
             INSERT INTO MAC
             (
                 device_id,
@@ -797,7 +814,7 @@ class device_db(sql_database):
     
     def create_table(self, drop_tables= True):
         
-        if drop_tables: cur.execute('''
+        if drop_tables: self.db.executescript('''
             DROP TABLE IF EXISTS Neighbor_IPs;
             DROP TABLE IF EXISTS MAC;
             DROP TABLE IF EXISTS Interfaces;
@@ -806,9 +823,9 @@ class device_db(sql_database):
             DROP TABLE IF EXISTS Devices;
             ''')
 
-        cur.execute('''
+        self.db.executescript('''
             CREATE TABLE IF NOT EXISTS Devices(
-                device_id          INTEGER PRIMARY KEY , 
+                device_id          INTEGER PRIMARY KEY AUTOINCREMENT, 
                 device_name        TEXT,
                 unique_name        TEXT,
                 netmiko_platform   TEXT,
@@ -827,7 +844,7 @@ class device_db(sql_database):
             );
             
             CREATE TABLE IF NOT EXISTS Interfaces(
-                interface_id       INTEGER PRIMARY KEY ,
+                interface_id       INTEGER PRIMARY KEY AUTOINCREMENT,
                 device_id          INTEGER NOT NULL,
                 interface_name     TEXT NOT NULL,
                 interface_number   TEXT,
@@ -843,7 +860,7 @@ class device_db(sql_database):
             );
 
             CREATE TABLE IF NOT EXISTS MAC(
-                mac_id                 INTEGER PRIMARY KEY ,
+                mac_id                 INTEGER PRIMARY KEY AUTOINCREMENT,
                 device_id              INTEGER NOT NULL,
                 interface_id           INTEGER NOT NULL,
                 mac_address            TEXT NOT NULL,
@@ -856,7 +873,7 @@ class device_db(sql_database):
             );
             
              CREATE TABLE IF NOT EXISTS Serials(
-                serial_id          INTEGER PRIMARY KEY ,
+                serial_id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 device_id          INTEGER NOT NULL,
                 serialnum          TEXT NOT NULL,
                 name               TEXT,
@@ -869,7 +886,7 @@ class device_db(sql_database):
             );
             
             CREATE TABLE IF NOT EXISTS Neighbors(
-                neighbor_id        INTEGER PRIMARY KEY , 
+                neighbor_id        INTEGER PRIMARY KEY AUTOINCREMENT, 
                 device_id          INTEGER NOT NULL,
                 interface_id       INTEGER,
                 device_name        TEXT,
@@ -891,7 +908,7 @@ class device_db(sql_database):
             );  
             
             CREATE TABLE IF NOT EXISTS Neighbor_IPs(
-                neighbor_ip_id     INTEGER PRIMARY KEY , 
+                neighbor_ip_id     INTEGER PRIMARY KEY AUTOINCREMENT, 
                 neighbor_id        INTEGER NOT NULL,
                 ip                 TEXT NOT NULL,
                 type               TEXT,
