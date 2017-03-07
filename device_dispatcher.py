@@ -6,7 +6,7 @@ from Devices.base_device import network_device
 from netmiko.ssh_autodetect import SSHDetect
 from Devices.nxos_device import nxos_device
 from Devices.ios_device import ios_device
-from wylog import log
+from wylog import log, logging
 
 import gvars, cli, util
 
@@ -40,7 +40,7 @@ def create_instantiated_device(*args, **kwargs):
     and creates the object based on netmiko_platform."""
     proc= 'device_dispatcher.create_instantiated_device'
     
-    log('Instantiating ' + kwargs['ip'], v= log.I, proc= proc)
+    log('Instantiating ' + kwargs['ip'], v= logging.I, proc= proc)
     
     # In case of an unknown platform, autodetect
     if kwargs.get('netmiko_platform') not in platforms:
@@ -58,7 +58,7 @@ def create_instantiated_device(*args, **kwargs):
         # instantiated based on vendor/platform.
         ConnectionClass = CLASS_MAPPER[kwargs['netmiko_platform']]
         
-    log('Instantiated ' + kwargs['ip'], v= log.I, proc= proc)
+    log('Instantiated ' + kwargs['ip'], v= logging.I, proc= proc)
     return ConnectionClass(*args, **kwargs)
     
 
@@ -81,7 +81,7 @@ def autodetect(target):
         '''
         proc= 'base_device.find_device_type'
         
-        log('Autodetecting unknown device type', proc= proc, v= log.I)
+        log('Autodetecting unknown device type', proc= proc, v= logging.I)
         
         # Error check
         assert type(target) is str, proc+ ': Target [{}] is not a string'.format(type(target))
@@ -92,7 +92,8 @@ def autodetect(target):
                                                netmiko_platform= 'terminal_server'
                                                )['connection']
         except IOError as e:
-            log('Autodetect connection failed.', proc= proc, v= log.A)
+            log('Autodetect connection failed.', proc= proc, v= logging.A)
+            
             raise IOError(proc+ 
                 ': Autodetect connection failed with error [{}]'.format(str(e)))
         
@@ -102,5 +103,5 @@ def autodetect(target):
         if ad is None: raise TypeError('Autodetection produced no result')
         else: 
             log('Autodetection determined a device type of [{}]'.format(ad), 
-                proc= proc, v= log.N)
+                proc= proc, v= logging.N)
             return ad

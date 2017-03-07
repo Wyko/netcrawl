@@ -2,7 +2,7 @@ from datetime import datetime
 from gvars import DEVICE_PATH, TIME_FORMAT_FILE
 from time import sleep
 from netmiko import ConnectHandler
-from wylog import log
+from wylog import log, logging
 
 import re, hashlib, util, os, gvars, cli
 
@@ -89,7 +89,7 @@ class network_device():
                 command, 
                 proc, 
                 fn_check, 
-                v= log.C, 
+                v= logging.C, 
                 attempts= 3, 
                 alert= True,
                 check_msg= None
@@ -113,7 +113,7 @@ class network_device():
             except Exception as e:
                 if i < (attempts-1):
                     log('Attempt: {} - Failed Command: {} - Error: {}'.format(str(i+1),
-                        command, str(e)), proc= proc, v= log.I)
+                        command, str(e)), proc= proc, v= logging.I)
                     # Sleep for an increasing amount of time
                     sleep(i*i + 1)
                     continue
@@ -125,12 +125,12 @@ class network_device():
             else:
                 # Evaluate the returned output using the passed lamda function
                 if fn_check(output): 
-                    log('Attempt: {} - Successful Command: {}'.format(str(i+1), command), proc= proc, v= log.I)
+                    log('Attempt: {} - Successful Command: {}'.format(str(i+1), command), proc= proc, v= logging.I)
                     return output
                 
                 elif i < (attempts-1):
                     log('Attempt: {} - Check Failed on Command: {}'.format(
-                        str(i+1), command), proc= proc, v= log.I)
+                        str(i+1), command), proc= proc, v= logging.I)
                     
                     # Sleep for an increasing amount of time
                     sleep(i*i + 1)
@@ -143,11 +143,12 @@ class network_device():
                 
     
     
-    def alert(self, msg, proc, failed= True, v= log.A):
+    def alert(self, msg, proc, failed= True, v= logging.A, ip= None):
         '''Populates the failed messages variable for the device'''
         self.failed = failed
-        self.failed_msg += proc + ': ' + msg + ' | '
-        log(msg= msg, proc= proc, v= v)
+        self.failed_msg += '{} - IP [{}]: {} | '.format(proc, ip, msg)
+        
+        log(msg= msg, proc= proc, v= v, ip= ip)
     
     
     def get_serials(self):
@@ -184,7 +185,7 @@ class network_device():
  
     def save_config(self):
         proc= 'base_device.save_config'
-        log('Saving config.', proc= proc, v= log.I)
+        log('Saving config.', proc= proc, v= logging.I)
         
         path = DEVICE_PATH + self.unique_name() + '/' 
         filename = datetime.now().strftime(TIME_FORMAT_FILE) + '.cfg'
@@ -198,7 +199,7 @@ class network_device():
                 self.config,
                 '\n']))
                 
-        log('Saved config.', proc= proc, v= log.N)
+        log('Saved config.', proc= proc, v= logging.N)
     
     
     def all_neighbors(self):
@@ -279,7 +280,7 @@ class network_device():
                     log('Interface {} merged with old interface'.
                         format(new_interf.interface_name), 
                         proc= proc,
-                        v= log.D)
+                        v= logging.D)
                     # For each variable in the interface class, compare and overwrite new ones.
                     for key in gvars(new_interf).keys():
                         gvars(old_interf)[key] = gvars(new_interf)[key] 
@@ -339,7 +340,7 @@ class network_device():
     
     def normalize_netmasks(self):
         for i in self.interfaces:
-            try: netmask= log.C(i.interface_subnet)
+            try: netmask= logging.C(i.interface_subnet)
             except: pass
             else: i.interface_subnet= netmask
             
@@ -358,7 +359,7 @@ class network_device():
             try: self.connection.enable()
             except Exception as e: 
                 log('Enable failed on attempt %s.' % (str(i+1)), 
-                    ip= self.connection.ip, proc= proc, v= log.A, error= e)
+                    ip= self.connection.ip, proc= proc, v= logging.A, error= e)
                 
                 # At the final try, return the failed device.
                 if i >= attempts-1: 
@@ -369,7 +370,7 @@ class network_device():
                 continue
             else: 
                 log('Enable successful on attempt %s' % (str(i+1)), 
-                    ip= self.connection.ip, proc= proc, v= log.D)
+                    ip= self.connection.ip, proc= proc, v= logging.D)
                 
                 return True
     
@@ -378,14 +379,14 @@ class network_device():
         '''Main method which fully populates the network_device'''
         proc= 'base_device.process_devices'
         
-        log ('Processing device', proc= proc, v= log.I)
+        log ('Processing device', proc= proc, v= logging.I)
         
         # Connect to the device
         try: result= cli.start_cli_session(handler= ConnectHandler,
                                           netmiko_platform= self.netmiko_platform,
                                           ip= self.ip,
                                           )
-        except IOError as e:
+        except Exception as e:
             self.alert('Connection failed', proc= proc)
             raise
         
@@ -427,10 +428,10 @@ class network_device():
                 fn
             except Exception as e:
                 self.alert(fn.__name__ + ' - Error: ' + str(e), proc= proc)
-                if not gvars.SUPPRESS_ERRORS: raise
+                if gvars.RAISE_ERRORS: raise
                
         
-        log('Finished polling {}'.format(self.unique_name()), proc= proc, v= log.H)
+        log('Finished polling {}'.format(self.unique_name()), proc= proc, v= logging.H)
         self.connection.disconnect()
         self.connection= None
         return True

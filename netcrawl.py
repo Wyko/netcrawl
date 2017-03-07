@@ -4,21 +4,24 @@ from time import sleep
 
 from wylog import logging, log
 
-import sys, argparse, textwrap, os, util, io_sql, gvars 
-import queue, multiprocessing
+import sys, argparse, textwrap, os, io_sql, gvars 
+import queue, multiprocessing, traceback, nmap, json
+from wylog.logging import logf
 
+
+@logf
 def normal_run(**kwargs):
     proc= 'main.normal_run'
-    log('Starting Normal Run', proc= proc, v= log.H)
+    log('Starting Normal Run', proc= proc, v= logging.H)
 
     # Connect to the databases
     main_db = io_sql.main_db(**kwargs)
     device_db = io_sql.device_db(**kwargs)
 
     # Add the seed device if a target was specified  
-    if 'target' in kwargs:
-        nlist.add_device_d(ip= kwargs['target'], 
-                           netmiko_platform= kwargs.get('netmiko_platform', 'unknown'))
+    if ('target' in kwargs) and (kwargs['target'] is not None):
+        main_db.add_pending_device_d(ip= kwargs['target'], 
+            netmiko_platform= kwargs.get('netmiko_platform', 'unknown'))
 
     # Set the number of sub-processes
     num_workers = multiprocessing.cpu_count() * 16
@@ -30,93 +33,102 @@ def normal_run(**kwargs):
     # Create workers and start them
     workers= [worker(tasks, 
                      results, 
-                     v= util.VERBOSITY,)
-              for i in range(num_workers)]
+                     v= logging.VERBOSITY,
+                     raise_exceptions= gvars.RAISE_ERRORS)
+              for i in range(num_workers) ]
     for w in workers: w.start()
     
     while True: 
-        
+
         #################### Add Devices To Queue #######################
         # While there are pending neighbors, process each one
-        while ((nlist.count_pending() >= 0) and
-            (tasks.full() == False)): 
+        remaining= main_db.count_pending()
+        while ((remaining >= 0) and (tasks.full() == False)): 
             
             # Get the next device
-            device_d = nlist.get_next()
+            device_d = main_db.get_next()
             if device_d is None: break
             
-            # Skip devices which have already been processed
-            if (kwargs.get('skip_named_duplicates', False) and 
-                vlist.ip_name_exists(device_d.get('ip', None), device_d.get('device_name', None))):
-                visited= True           
-            elif vlist.ip_exists(device_d.get('ip', None)): 
-                visited= True
+            # Skip devices which have already been visited
+            if (kwargs.get('skip_named_duplicates') and 
+                main_db.ip_name_exists(ip= device_d.get('ip'), 
+                                       name= device_d.get('device_name'), 
+                                       table= 'visited')): visited= True  
+                                                
+            elif main_db.ip_exists(ip= device_d.get('ip'), 
+                                   table= 'visited'): visited= True
             else: visited= False
             
             if visited:
                 log('- Device {1} at {0} has already been processed. Skipping.'.format(
                     device_d.get('ip', None), device_d.get('device_name', None)), 
-                    proc= proc, v= log.N)
-                nlist.set_processed(device_d['device_id'])
+                    proc= proc, v= logging.N)
+                main_db.remove_pending_record(device_d['pending_id'])
                 continue
         
             log('---- Adding to queue: {name} at {ip} || {pending} devices pending ----'.format(
                 ip= device_d.get('ip', None), 
                 name= (device_d.get('device_name') if device_d.get('device_name') is not None 
                        else '[Unknown Device]'), 
-                pending= nlist.count_pending()), 
-                proc= proc, v= log.H)
+                pending= main_db.count_pending()), 
+                proc= proc, v= logging.H)
             
             tasks.put(device_d)
-
         
         ################### Get results from the queue ###################
         results_pool= []
         while not results.empty(): 
-            log('Getting subprocess results', proc= proc, v= log.D)
+            log('Getting subprocess results', proc= proc, v= logging.D)
             try: results_pool.append(results.get_nowait())
             except queue.Empty: 
-                log('Queue Empty', proc= proc, v= log.D)
+                log('Queue Empty', proc= proc, v= logging.D)
                 break
-            else: log('Got a result', proc= proc, v= log.D)
+            else: log('Got a result', proc= proc, v= logging.D)
         
         log('Got [{}] subprocess results'.format(
-                len(results_pool)), proc= proc, v= log.I)
+                len(results_pool)), proc= proc, v= logging.I)
         
         ############# Insert Processed Devices Into Database #############
         for result in results_pool:
             # Record the device as being processed and save it
-            log('Setting result [{}] as processed'.format(result['original']['ip']), proc= proc, v= log.I)
-            nlist.set_processed(result['original']['device_id'])
+            log('Setting result [{}] as processed'.format(result['original']['ip']), proc= proc, v= logging.I)
+            main_db.remove_pending_record(result['original']['pending_id'])
             
-            log('Adding result [{}] to Visited'.format(result['original']['ip']), proc= proc, v= log.I)
-            vlist.add_device_d(result['original'])
+            log('Adding result [{}] to Visited'.format(result['original']['ip']), proc= proc, v= logging.I)
+            main_db.add_visited_device_d(result['original'])
         
             if ((result['error'] is not None) or 
                 (result['device'].failed)): continue 
                 
             else: 
                 # Add a successfully polled device to the database
-                log('Adding result [{}] to Devices'.format(result['original']['ip']), proc= proc, v= log.I)
-                dlist.add_device_nd(result['device']) 
+                log('Adding result [{}] to Devices'.format(result['original']['ip']), proc= proc, v= logging.I)
+                device_db.add_device_nd(result['device']) 
     
                 # Save the device config and the device neighbors 
-                log('Saving result [{}] Neighbors'.format(result['original']['ip']), proc= proc, v= log.I)
-                nlist.add_device_neighbors(result['device'])
+                log('Saving result [{}] Neighbors'.format(result['original']['ip']), proc= proc, v= logging.I)
+                main_db.add_device_pending_neighbors(result['device'])
                 result['device'].save_config()
                 
                 log('Successfully processed {}'.format(result['device'].device_name), 
-                    proc= proc, v= log.H)
+                    proc= proc, v= logging.H)
+
+                
+        #################### POISION PILL ###############################
+        if (remaining is 0) and tasks.empty():
+            for w in workers:
+                tasks.put(None)
+            break
         
         sleep(1)
-        log('Main loop done.', proc= proc, v= log.I)
+        log('Main loop done.', proc= proc, v= logging.I)
     
     # Close the connections to the databases
     main_db.close()
     device_db.close()    
     
-    log('Normal run complete. {} devices pending.'.
-            format(nlist.count_pending()), proc= proc, v= log.H)
+    log('Normal run complete. 0 devices pending.', 
+        proc= proc, v= logging.H)
 
 
 class worker(multiprocessing.Process):
@@ -125,22 +137,24 @@ class worker(multiprocessing.Process):
                  task_queue, 
                  result_queue,
                  v= 4, # Verbosity
+                 raise_exceptions= False
                  ):
         
         multiprocessing.Process.__init__(self)
         self.result_queue = result_queue
         self.task_queue = task_queue
         self.v= v
+        self.raise_exceptions = raise_exceptions
     
     def run(self):
-        util.VERBOSITY= self.v
         proc= '{}.run'.format(self.name)
+        logging.VERBOSITY= self.v
         while True:
             
             log('{}: Awaiting task. Queue size: [{}]'.format(
                                                 self.name,
                                                 self.task_queue.qsize()),
-                                                v= log.I,
+                                                v= logging.I,
                                                 proc= proc)
             # Get the next device in the queue
             next_device = self.task_queue.get()
@@ -148,7 +162,7 @@ class worker(multiprocessing.Process):
             # Poison pill means shutdown
             if next_device is None:
                 log('{}: Got poision pill. Walking into the light...'.format(
-                    self.name, self.task_queue.qsize()), v= log.N, proc= proc)
+                    self.name, self.task_queue.qsize()), v= logging.I, proc= proc)
                 
                 self.task_queue.task_done()
                 break
@@ -156,7 +170,7 @@ class worker(multiprocessing.Process):
             log('{}: Got IP [{}], Device [{}]'.format(self.name, 
                                                       next_device.get('ip', 'Unknown IP'),
                                                       next_device),
-                                                      v= log.N, proc= proc, 
+                                                      v= logging.N, proc= proc, 
                                                       ip= next_device.get('ip', 'Unknown IP'))
             
             # Prepare the result set to pass back to the main proccess
@@ -170,17 +184,42 @@ class worker(multiprocessing.Process):
             # Create an inherited device class object
             try: result['device']= create_instantiated_device(**next_device)
             except TypeError as e:
+                log('Device [{}] could not be instantiated: [{}]'.format(
+                    next_device.get('ip'), str(e)), 
+                    v=logging.C, proc= proc)
                 result['log']= 'Device could not be instantiated.\n'
                 result['error']= e 
                 self.task_queue.task_done()
                 self.result_queue.put(result)
-                continue
+                
+                if self.raise_exceptions: raise
+                else: 
+                    traceback.print_exc()
+                    continue
                 
             # Poll the device
             try: result['device'].process_device()
             except Exception as e:
+                log('Connection to {} failed: {}'.format(
+                    result['device'].ip, str(e)), 
+                    v=logging.C, proc= proc)
                 result['log']= 'Connection to {} failed: {}'.format(result['device'].ip, str(e))
-                result['error']= e                                                    
+                result['error']= e   
+                
+                # Set the connection to None in order to allow Pickling
+                result['device'].connection= None
+                
+                # Put the result on the device queue and signal done
+                self.task_queue.task_done()
+                self.result_queue.put(result) 
+                    
+                # Ignore CLI errors, raise the rest
+                if (self.raise_exceptions and 
+                    ('CLI connection' not in str(e))): 
+                    raise
+                else: 
+#                     traceback.print_exc()
+                    continue                                            
             
             # Set the connection to None in order to allow Pickling
             result['device'].connection= None
@@ -190,64 +229,60 @@ class worker(multiprocessing.Process):
             self.result_queue.put(result)
         return
             
-
-
-def scan_range(_target= '10.20.254.15', **kwargs):
-    '''Ping each host in a given range one at a time. When a live host
-    is found, add it to the pending hosts list and run the normal_scan
-    method.''' 
-    proc= 'main.scan_range'
-     
-    import nmap, json
-    
-    log('Starting host scan on target ' + _target, proc= proc, v= log.H)
-    
-    nm= nmap.PortScanner()
-    vlist = io_sql.visited_db(MAIN_DB_PATH, **kwargs)
-    nlist = io_sql.neighbor_db(MAIN_DB_PATH, **kwargs)
-    
-    # Use NMAP's nice target specification feature
-    # to get a list of all the hosts to scan
-    hosts= nm.listscan(_target)
-    
-    for h in hosts:
-        
-        # Skip hosts we've already discovered
-        if vlist.ip_exists(h) or nlist.ip_exists(h): 
-            log(h + ' already visited, skipping.', v= log.D, proc= proc)
-            continue
+def _scan_host(h, nm):
         
         # Scan the host
         nm.scan(h, '22, 23', '-sV -T5')
         
         # Continue loop if the host is down
         if not nm.has_host(h): 
-            log(h + ' is down', v= log.D, proc= proc)
-            continue
-        else:
-            log(h + ' is ' + nm[h].state(), v= log.D, proc= proc)
+            return h + ' is down'
         
         # Add newly discovered devices to the database
         if (
             (nm[h].has_tcp(22) and nm[h].tcp(22).get('state') == 'open') or
             (nm[h].has_tcp(23) and nm[h].tcp(23).get('state') == 'open')
             ):
-            nlist.add_device_d({
-                            'netmiko_platform': 'unknown',
-                            'raw_cdp': json.dumps(nm[h], sort_keys=True, indent=4),
-                            'ip': h,
-                            })
-            log('Found: {}, Port 22: {}, Port 23: {}'.format(h, 
-                         nm[h].tcp(22).get('state', 'Unknown'),
-                         nm[h].tcp(23).get('state', 'Unknown')),
-                         proc= proc, v= log.N)
+            return {
+                    'netmiko_platform': 'unknown',
+                    'raw_cdp': json.dumps(nm[h], sort_keys=True, indent=4),
+                    'ip': h,
+                    }
+
+def scan_range(_target, **kwargs):
+    '''Ping each host in a given range one at a time. When a live host
+    is found, add it to the pending hosts list and run the normal_scan
+    method.''' 
+    proc= 'main.scan_range'
+     
+    log('Starting host scan on target ' + _target, proc= proc, v= logging.H)
+    
+    nm= nmap.PortScanner()
+    main_db = io_sql.main_db(**kwargs)
+    
+    # Use NMAP's nice target specification feature
+    # to get a list of all the hosts to scan
+    hosts= nm.listscan(_target)
+    
+    pool = multiprocessing.Pool(processes= multiprocessing.cpu_count() * 4)
+    
+    results = [pool.apply_async(_scan_host, args=(h, nm, )) for h in hosts if 
+               not((main_db.ip_exists(h, 'visited')) or
+                   (main_db.ip_exists(h, 'pending')))]
+    
+    for r in results:
+        result= r.get()
+        print(result)
         
-    log('Finished scanning hosts', proc= proc, v= log.H)
+        if isinstance(result, dict):
+            main_db.add_pending_device_d(result)
+        
+    log('Finished scanning hosts', proc= proc, v= logging.H)
 
 def single_run(ip, netmiko_platform, **kwargs):
     proc= 'main.single_run'
     
-    log('Processing connection to {}'.format(ip), proc= proc, v= log.H)
+    log('Processing connection to {}'.format(ip), proc= proc, v= logging.H)
     
     device = create_instantiated_device(ip= ip, netmiko_platform= netmiko_platform)
     
@@ -255,7 +290,7 @@ def single_run(ip, netmiko_platform, **kwargs):
     try: device.process_device()
     except Exception as e:
         device.alert(msg= 'Connection to {} failed: {}'.format(device.ip, str(e)), proc= proc)
-        if not gvars.SUPPRESS_ERRORS: raise
+        if gvars.RAISE_ERRORS: raise
         
     # Save the device
     dlist = io_sql.device_db(DEVICE_DB_PATH, **kwargs)
@@ -401,6 +436,7 @@ def parse_cli():
         action='store',
         dest='host',
         metavar= 'TARGET',
+#         default= None,
         help= 'Hostname or IP address of a starting device'
         )
     
@@ -429,8 +465,8 @@ if __name__ == "__main__":
         args = parse_cli()
           
         # Set verbosity level for wylog
-        util.VERBOSITY = args.v
-        util.PRINT_DEBUG = args.debug
+        logging.VERBOSITY = args.v
+        logging.PRINT_DEBUG = args.debug
           
         # Create the directory to host the logs and other files
         if not os.path.exists(RUN_PATH):
@@ -438,15 +474,15 @@ if __name__ == "__main__":
           
         if args.network_scan:
             if args.host: 
-                log('##### Starting Scan #####', proc= proc, v= log.H)
+                log('##### Starting Scan #####', proc= proc, v= logging.H)
                 scan_range(args.host,
                            clean= args.clean)
-                log('##### Scan Complete #####', proc= proc, v= log.H)
+                log('##### Scan Complete #####', proc= proc, v= logging.H)
             else:
                 print('--target (-t) is required when performing a network scan (-ns)')
            
         elif args.recursive: 
-            log('##### Starting Recursive Run #####', proc= proc, v= log.H)
+            log('##### Starting Recursive Run #####', proc= proc, v= logging.H)
             
             normal_run(
                 target= args.host, 
@@ -454,17 +490,17 @@ if __name__ == "__main__":
                 resume= args.resume,
                 clean= args.clean,
                 )
-            log('##### Recursive Run Complete #####', proc= proc, v= log.H)
+            log('##### Recursive Run Complete #####', proc= proc, v= logging.H)
            
         else: 
-            log('##### Starting Single Run #####', proc= proc, v= log.H)
+            log('##### Starting Single Run #####', proc= proc, v= logging.H)
             single_run(
                 ip= args.host, 
                 netmiko_platform= args.platform,
                 resume= args.resume,
                 clean= args.clean,
                 )
-            log('##### Single Run Complete #####', proc= proc, v= log.H)
+            log('##### Single Run Complete #####', proc= proc, v= logging.H)
         
     else:
         print('No arguments passed.')

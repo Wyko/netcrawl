@@ -6,7 +6,7 @@ Created on Feb 19, 2017
 
 from Devices.cisco_device import cisco_device
 from Devices.base_device import interface
-from wylog import log
+from wylog import log, logging
 
 import re
 
@@ -15,12 +15,12 @@ class ios_device(cisco_device):
    
     def get_interfaces(self):
         proc= 'ios_device.parse_ios_interfaces'
-        log('Starting ios interface parsing.', proc= proc, v= log.I)
+        log('Starting ios interface parsing.', proc= proc, v= logging.I)
         
         interfaces = []
         # If no device config was passed, return
         if not self.config: 
-            log('Error: No data in self.config.', proc= proc, v= log.A)
+            log('Error: No data in self.config.', proc= proc, v= logging.A)
             raise ValueError(proc+ ': No data in self.config.')
         
         # Split out the interfaces from the raw config
@@ -62,17 +62,17 @@ class ios_device(cisco_device):
                 if ip_info and ip_info.group(2): i.interface_subnet = ip_info.group(2)    
             except Exception as e:
                 log('Exception while parsing IP and Subnet: {}'.format(str(e)),
-                    proc = proc, v= log.C)
+                    proc = proc, v= logging.C)
                 pass
             
             interfaces.append(i)
     
         if len(interfaces) > 0:
             log('Interfaces found: {}'.format(
-                len(interfaces)), proc= proc, v= log.N)  
+                len(interfaces)), proc= proc, v= logging.N)  
         else:
             log('Error: No interfaces found. Raw_interfaces was: {}'.format(
-                raw_interfaces), proc= proc, v= log.C)  
+                raw_interfaces), proc= proc, v= logging.C)  
             raise ValueError(proc+ ': No interfaces found.')               
         
         self.merge_interfaces(interfaces)  

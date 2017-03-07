@@ -15,7 +15,7 @@ DELAY_INCREASE = 0.3
 BASE_DELAY = 1
 
 # Set to false to get full tracebacks
-SUPPRESS_ERRORS = True
+RAISE_ERRORS = False
 
 CRED_LIST = []
 
