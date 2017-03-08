@@ -4,28 +4,28 @@ Created on Feb 19, 2017
 @author: Wyko
 '''
 
-from util import log, parse_ip
-from time import sleep
-import re, util
-import gvars
 from Devices.base_device import network_device, interface
+from wylog import log, logging
+from util import parse_ip
+from time import sleep
+import re, gvars, util
 
 class cisco_device(network_device):
         
     def parse_hostname(self, attempts=5):
         proc= 'cisco_device.parse_hostname'
-        log('Parsing hostname', proc= proc, v= util.I)
+        log('Parsing hostname', proc= proc, v= logging.I)
         
         output = re.search('^hostname (.+)\n', self.config, re.MULTILINE)
         if output and output.group(1): 
-            log('Hostname from regex: {}'.format(output.group(1)), proc= proc, v= util.N)
+            log('Hostname from regex: {}'.format(output.group(1)), proc= proc, v= logging.N)
             self.device_name= output.group(1)
             return True
         
-        else: log('Regex parsing failed, trying prompt parsing.', proc= proc, v= util.D)
+        else: log('Regex parsing failed, trying prompt parsing.', proc= proc, v= logging.D)
         
         if not self.connection: 
-            log('No self.connection object available. Method failed', proc= proc, v= util.C)
+            log('No self.connection object available. Method failed', proc= proc, v= logging.C)
             raise ValueError(proc+ ': No self.connection object available')
         
         # If the hostname couldn't be parsed, get it from the prompt    
@@ -36,26 +36,26 @@ class cisco_device(network_device):
                 self.connection.global_delay_factor += gvars.DELAY_INCREASE
                 log('Failed to find the prompt during attempt %s. Increasing delay to %s'  
                     % (str(i+1), self.connection.global_delay_factor), 
-                    proc= proc, v= util.A)
+                    proc= proc, v= logging.A)
                 sleep(2 + i)
                 continue
                         
             if '#' in output: 
                 self.device_name= output.split('#')[0]
-                log('Hostname from prompt: ' + self.device_name, proc= proc, v= util.N)
+                log('Hostname from prompt: ' + self.device_name, proc= proc, v= logging.N)
                 return True
             
             else: sleep(2 + 1)
         
         # Last case scenario, return nothing
-        log('Failed. No hostname found.', proc= proc, v= util.C)
+        log('Failed. No hostname found.', proc= proc, v= logging.C)
         raise ValueError('parse_hostname failed. No hostname found.')
 
     
     def get_serials(self):
         proc= 'cisco_device.get_serials'
         
-        log('Starting to get serials', proc= proc, v= util.I)
+        log('Starting to get serials', proc= proc, v= logging.I)
         
         # Poll the device for the serials
         raw_output= self.attempt('show inventory', 
@@ -77,7 +77,7 @@ class cisco_device(network_device):
         if not (output and output[0]):
             log('Failed to get serials. Re.Findall produced no results. ' + 
                 'Raw_output[:20] was: {}'.format(raw_output[:20]), 
-                ip= self.connection.ip, proc= proc, v= util.A)
+                ip= self.connection.ip, proc= proc, v= logging.A)
             raise ValueError(proc+ ': Failed to get serials. Re.Findall produced no results '+
                 'Raw_output was: {}'''.format(raw_output))
                 
@@ -89,7 +89,7 @@ class cisco_device(network_device):
                 'desc': i[1],
                 'serialnum': i[2]
                 })
-        log('Serials found: {}'.format(len(serials)), proc= proc, v= util.N)
+        log('Serials found: {}'.format(len(serials)), proc= proc, v= logging.N)
         self.serial_numbers.extend(serials)
         return True
         
@@ -98,7 +98,7 @@ class cisco_device(network_device):
         '''Returns a tuple containing (interface_type, interface_number)'''
         
         try: output= re.search(r'''
-                ([A-Za-z]{2,})   # An interface name, consisting of at least 2 letters
+                ([A-Za-z\-]{2,})   # An interface name, consisting of at least 2 letters
                 ([\d\/\.]+)        # The interface number, with potential backslashes
             ''', interface_name, re.I | re.X | re.M) 
         except: 
@@ -112,7 +112,9 @@ class cisco_device(network_device):
             else: 
                 return None
     
-
+    
+    
+    
     def get_mac_address_table(self, attempts= 3):
         '''Populates self.mac_address_table from the remote device.
         
@@ -124,20 +126,20 @@ class cisco_device(network_device):
         '''
         proc= 'cisco_device.get_mac_address_table'
 
-        log('Getting MAC address table', proc= proc, v=util.I)
+        log('Getting MAC address table', proc= proc, v= logging.I)
         
         # Try the two command formats
         try: self.raw_mac_address_table = self.attempt('show mac address-table', 
                          proc= proc, 
-                         fn_check= lambda x: bool(re.search(r'(?:[0-9A-F]{2,4}[\:\-\.]){2,7}[0-9A-F]{2,4}', x, re.I)),
+                         fn_check= util.contains_mac_address,
                          alert= False)
         except: 
             try: self.raw_mac_address_table = self.attempt('show mac-address-table', 
                          proc= proc, 
-                         fn_check= lambda x: bool(re.search(r'(?:[0-9A-F]{2,4}[\:\-\.]){2,7}[0-9A-F]{2,4}', x, re.I)),
+                         fn_check= util.contains_mac_address,
                          alert= False)
             except:
-                log('No MAC addresses found.', proc= proc, v=util.A)
+                log('No MAC addresses found.', proc= proc, v= logging.A)
                 return False
         
         # Parse the table
@@ -149,14 +151,15 @@ class cisco_device(network_device):
             .*?                      # Skip all characters up to the interface
             (?P<interface_name>      # Interface capture group
                 (?P<interface_type>
-                    [A-Za-z]{2,}     # At least two letters
+                    [A-Za-z\-]{2,}     # At least two letters
                 )
                 (?P<interface_number>
                     [\d\/]+          # Any combination of numbers and
                 )    
             )
             \s*?$                    # Match if interface is at the end of the line
-            ''', self.raw_mac_address_table, flags= (re.X | re.I | re.M) )
+            ''', 
+            self.raw_mac_address_table, flags= (re.X | re.I | re.M) )
 
         # Return a dictionary containing the MAC's and interfaces
         self.mac_address_table= [m.groupdict() for m in output]
@@ -164,7 +167,7 @@ class cisco_device(network_device):
         count= 0
         for mac in self.mac_address_table:
             # Ignore blank mac addresses
-            if mac == 'ffff.ffff.ffff': continue
+            if mac['mac_address'] == 'ffff.ffff.ffff': continue
             
             count+=1 
             
@@ -178,17 +181,20 @@ class cisco_device(network_device):
                 interf.interface_name= mac['interface_name']
                 self.interfaces.append(interf)
             
+            # Normalize the MAC
+            mac['mac_address']= self._normalize_mac_address(mac['mac_address'])
+            
             # Add the MAC to the interface
             interf.mac_address_table.append(mac['mac_address'])
         
-        log('MAC entries found: {}'.format(count), proc=proc, v=util.N)
+        log('MAC entries found: {}'.format(count), proc=proc, v= logging.N)
         return True
 
 
     def get_config(self, attempts=5):
         proc= 'cisco_device.get_config'
         
-        log('Beginning config download from %s' % self.connection.ip, proc= proc, v= util.I)
+        log('Beginning config download from %s' % self.connection.ip, proc= proc, v= logging.I)
 
         self.config= self.attempt('show run', 
                              proc= proc, 
@@ -197,20 +203,20 @@ class cisco_device(network_device):
                              attempts= attempts,
                              )
         
-        log('Config download successful.', self.connection.ip, proc= proc, v= util.N)
+        log('Config download successful.', ip= self.connection.ip, proc= proc, v= logging.N)
     
     
     def get_other_ips(self):
         proc= 'cisco_device.get_other_ips'
         output = re.findall(r'(?:glbp|hsrp|standby).*?(\d{1,3}(?:\.\d{1,3}){3})', self.config, re.I)
-        log('{} non-standard (virtual) ips found on the device'.format(len(output)), proc= proc, v= util.D)
+        log('{} non-standard (virtual) ips found on the device'.format(len(output)), proc= proc, v= logging.D)
         self.other_ips.extend(output)
         
     
     def get_cdp_neighbors(self, attempts= 3):
         proc= 'cisco_device.get_cdp_neighbors'
 
-        log('Getting CDP neighbors', proc= proc, v= util.I)
+        log('Getting CDP neighbors', proc= proc, v= logging.I)
         
         for i in range(attempts):
             # Get the CDP neighbors for the device 
@@ -221,7 +227,7 @@ class cisco_device(network_device):
             
             # Check whether CDP is enabled at all
             if re.search(r'not enabled', raw_cdp, re.I): 
-                log('CDP not enabled on %s' % self.connection.ip, proc= proc, v= util.C)
+                log('CDP not enabled on %s' % self.connection.ip, proc= proc, v= logging.C)
                 raise ValueError(proc+ ': CDP not enabled on %s' % self.connection.ip)
             
             # Split the full 'sh cdp [...]' output into non-empty individual neighbors
@@ -247,11 +253,11 @@ class cisco_device(network_device):
             # If no neighbors were found, try again
             if not neighbor_count > 0:
                 log('Attempt {}: No CDP neighbors found. raw_cdp[20] was: {}'.format(
-                    str(i+1), raw_cdp[:20]), proc= proc, v= util.A)
+                    str(i+1), raw_cdp[:20]), proc= proc, v= logging.A)
                 if i >= attempts: raise ValueError(proc+ ': Command successful but no neighbors found from %s' % self.connection.ip)
                 continue
             else:
-                log('CDP neighbors found: {}'.format(neighbor_count), proc= proc, v= util.NORMAL)
+                log('CDP neighbors found: {}'.format(neighbor_count), proc= proc, v= logging.N)
                 
             self.neighbors= cdp_neighbor_list
             self.raw_cdp = raw_cdp
@@ -288,12 +294,12 @@ class cisco_device(network_device):
             if bool(p.match(interf.interface_name)):
                 log('Partial interface {} matched interface {}'.format(
                     partial, interf.interface_name),
-                    v= util.D, proc= proc)
+                    v= logging.D, proc= proc, ip= self.ip)
                 
                 return interf 
         
         # If no match was found return false
-        self.alert('No interface match for {}'.format(partial), proc= proc, failed= False)
+        self.alert('No interface match for {}'.format(partial), proc= proc, failed= False, ip= self.ip)
         return None
                     
         
@@ -333,16 +339,11 @@ class cisco_device(network_device):
             'neighbor_interface': None,
             'software': None,
             'raw_cdp': cdp_input,
-            'ip': None,
-            'other_ips': []
+            'ip_list': None,
             }
         
         # Get each IP address
-        ip_list = parse_ip(cdp_input)
-        
-        for i, ip in enumerate(ip_list):
-            if i==0: output['ip'] = ip
-            else: output['other_ips'].append(ip)
+        output['ip_list'] = parse_ip(cdp_input)
         
         output['netmiko_platform'] = self.parse_netmiko_platform(cdp_input)
         

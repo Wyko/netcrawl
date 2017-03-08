@@ -1,24 +1,9 @@
 from datetime import datetime
 from contextlib import closing
+from multiprocessing import Lock
 
-import socket, os, re
+import socket, os, re, time
 
-# Stores current global verbosity level
-VERBOSITY = 4
-
-# Variables for logging
-CRITICAL = 1
-C = 1
-ALERT = 2
-A = 2
-HIGH = 3
-H = 3
-NORMAL = 4
-N = 4
-INFORMATIONAL = 5
-I = 5
-DEBUG = 6
-D = 6
 
 
 def getCreds():
@@ -40,6 +25,19 @@ def getCreds():
     username = input("Username: ")
     password = getpass.getpass("Password: ")
     return [{'user': username, 'password': password, 'type': 'User Entered'}]  
+
+
+def contains_mac_address(mac):
+    '''Simple boolean operator to determine if a string contains a mac anywhere
+    within it.'''
+    return bool(re.search(r'''
+        (?:
+            [0-9A-F]{2,4}  # Match 2-4 Hex characters
+            [\:\-\.]       # Seperated by :, -, or .
+        ){2,7}             # match it between 2 and 7 times
+            [0-9A-F]{2,4}  # Followed by one last set of Hex
+        ''', 
+        mac, re.I|re.X))
 
 
 def parse_ip(raw_input):
@@ -78,81 +76,43 @@ def cidr_to_netmask(cidr):
     just added some error checking.'''
     
     # Strip any non digit characters
-    if type(cidr) == str: 
+    if isinstance(cidr, str): 
         cidr= int(re.sub(r'\D', '', str(cidr)))
-    else: cidr= int(cidr)
+    
+    try: cidr= int(cidr)
+    except Exception as e: 
+        raise ValueError('Input CIDR [{}] not a valid netmask. '
+                         'Error [{}]'.format(cidr, str(e)))
     
     if not (0 <= cidr <= 32):
-        raise ValueError('Input CIDR not recognized as a valid netmask')
+        raise ValueError('Input CIDR [{}] not a valid '
+                         'netmask.'.format(cidr))
      
     return '.'.join([str((0xffffffff << (32 - cidr) >> i) & 0xff)
                     for i in [24, 16, 8, 0]])
 
-def log(msg, 
-        ip='', 
-        print_out=True, 
-        proc='', 
-        log_path = os.path.dirname(__file__) + '/runtime/',
-        v = 4,
-        error= ''
-        ):
-    """Writes a message to the log.
-    
-    Args:
-        msg (string): The message to write.
-        
-    Optional Args:
-        ip (string): The IP address.
-        proc (string): The process which caused the log entry
-        log_path (string): Where to save the file
-        print_out (Boolean): If True, copies the message to console
-        v (Integer): Verbosity level. Logs with verbosity above the global 
-            verbosity level will not be printed out.  
-            v= 1: Critical alerts
-            v= 2: Non-critical alerts
-            v= 3: High level info
-            v= 4: Common info
-            v= 5: Debug level info
-            
-        error (Exception): 
-        
-    Returns:
-        Boolean: True if write was successful, False otherwise.
-    """ 
-    
-    time_format = '%Y-%m-%d %H:%M:%S'
 
-    # Set the prefix for the log entry
-    if v >=3: info_str = '#' + str(v)
-    if v ==2: info_str = '? '
-    if v ==1: info_str = '! '
+def timeit(method):
+    def timed(*args, **kw):
+        ts = time.time()
+        result = method(*args, **kw)
+        te = time.time()
+        print('Function', method.__name__, 'time:', round((te -ts)*1000,1), 'ms')
+        print()
+        return result
+    return timed
 
-    msg = info_str + ' ' + msg
-    
-    output = '{_time}, {_proc:<25}, {_msg:60}, {_ip}, {_error}'.format(
-                _time= datetime.now().strftime(time_format),
-                _proc= proc,
-                _msg = msg.replace(',', ';'),
-                _ip = ip,
-                _error = str(error)
-                )
-    
-    # Print the message to console            
-    if v <= VERBOSITY and print_out: print('{:<35.35}: {}'.format(proc, msg))
-    
-    if not os.path.exists(log_path):
-        os.makedirs(log_path)
-    
-    # Open the error log
-    f = open(log_path + 'log.txt','a')
-    
-    if f and not f.closed:
-        f.write(output + '\n')
-        f.close()
-        return True
-    
-    else: return False
-    
+        
+class benchmark(object):
+    def __init__(self,name):
+        self.name = name
+    def __enter__(self):
+        self.start = time.time()
+    def __exit__(self,ty,val,tb):
+        end = time.time()
+        print("%s : %0.5f seconds" % (self.name, end-self.start))
+        return False    
+
 
 def port_is_open(port, address, timeout=5):
     """Checks a socket to see if the port is open.

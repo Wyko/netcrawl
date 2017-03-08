@@ -1,11 +1,12 @@
-from util import log, port_is_open, getCreds
 from datetime import datetime
 from gvars import DEVICE_PATH, TIME_FORMAT_FILE
 from time import sleep
-from netmiko import ConnectHandler, NetMikoAuthenticationException
-from netmiko import NetMikoTimeoutException
-from netmiko.ssh_autodetect import SSHDetect
+from netmiko import ConnectHandler
+from wylog import log, logging
+
 import re, hashlib, util, os, gvars, cli
+from util import is_ip
+
 
 class interface():
     '''Generic network device interface'''
@@ -45,16 +46,17 @@ class network_device():
         self.raw_mac_address_table= kwargs.pop('raw_mac_address_table', None)
         self.netmiko_platform= kwargs.pop('netmiko_platform', None)
         self.system_platform= kwargs.pop('system_platform', None)
-        self.connection= kwargs.pop('connection', None)
+        self.process_name= kwargs.pop('process_name', None)
         self.neighbor_id= kwargs.pop('neighbor_id', None)        
         self.device_name= kwargs.pop('device_name', None)
+        self.connection= kwargs.pop('connection', None)
         self.AD_enabled= kwargs.pop('AD_enabled', None)
+        self.device_id= kwargs.pop('device_id', None)
         self.software= kwargs.pop('software', None)
         self.raw_cdp= kwargs.pop('raw_cdp', None)
         self.config= kwargs.pop('config', None)
         self.TCP_22= kwargs.pop('TCP_22', None)
         self.TCP_23= kwargs.pop('TCP_23', None)
-        self.device_id= kwargs.pop('id', None)
         self.ip= kwargs.pop('ip', None)
         
         # Mutable arguments
@@ -66,8 +68,9 @@ class network_device():
         self.other_ips= []
         
         # Other Args
-        self.failed_msg = ''
+        self.processing_error= False
         self.failed = False
+        self.error_log = ''
         
         
     def __str__(self):
@@ -88,7 +91,7 @@ class network_device():
                 command, 
                 proc, 
                 fn_check, 
-                v= util.C, 
+                v= logging.C, 
                 attempts= 3, 
                 alert= True,
                 check_msg= None
@@ -97,11 +100,11 @@ class network_device():
         
         Args:
             command (String): The command to send
-            proc (String): The calling process (for logging purposes)
+            proc (String): The calling process (for wylog purposes)
             fn_check (Lambda): A boolean function to evaluate the output
             
         Optional Args:
-            v (Integer): Log alert level for a failed run
+            v (Integer): log alert level for a failed run
             attempts (Integer): Number of times to try the command
             alert (Boolean): LIf True, log failed attempts
         
@@ -112,7 +115,7 @@ class network_device():
             except Exception as e:
                 if i < (attempts-1):
                     log('Attempt: {} - Failed Command: {} - Error: {}'.format(str(i+1),
-                        command, str(e)), proc= proc, v=util.I)
+                        command, str(e)), proc= proc, v= logging.I)
                     # Sleep for an increasing amount of time
                     sleep(i*i + 1)
                     continue
@@ -124,12 +127,12 @@ class network_device():
             else:
                 # Evaluate the returned output using the passed lamda function
                 if fn_check(output): 
-                    log('Attempt: {} - Successful Command: {}'.format(str(i+1), command), proc= proc, v=util.I)
+                    log('Attempt: {} - Successful Command: {}'.format(str(i+1), command), proc= proc, v= logging.I)
                     return output
                 
                 elif i < (attempts-1):
                     log('Attempt: {} - Check Failed on Command: {}'.format(
-                        str(i+1), command), proc= proc, v=util.I)
+                        str(i+1), command), proc= proc, v= logging.I)
                     
                     # Sleep for an increasing amount of time
                     sleep(i*i + 1)
@@ -142,11 +145,13 @@ class network_device():
                 
     
     
-    def alert(self, msg, proc, failed= True, v= util.A):
+    def alert(self, msg, proc, failed= False, v= logging.A, ip= None):
         '''Populates the failed messages variable for the device'''
-        self.failed = failed
-        self.failed_msg += proc + ': ' + msg + ' | '
-        log(msg= msg, proc= proc, v= v)
+        if failed: self.failed = failed
+        self.error = True
+        self.error_log += '{} - IP [{}]: {} | '.format(proc, ip, msg)
+        
+        log(msg= msg, proc= proc, v= v, ip= ip)
     
     
     def get_serials(self):
@@ -183,7 +188,7 @@ class network_device():
  
     def save_config(self):
         proc= 'base_device.save_config'
-        log('Saving config.', proc= proc, v= util.I)
+        log('Saving config.', proc= proc, v= logging.I)
         
         path = DEVICE_PATH + self.unique_name() + '/' 
         filename = datetime.now().strftime(TIME_FORMAT_FILE) + '.cfg'
@@ -197,7 +202,7 @@ class network_device():
                 self.config,
                 '\n']))
                 
-        log('Saved config.', proc= proc, v= util.N)
+        log('Saved config.', proc= proc, v= logging.N)
     
     
     def all_neighbors(self):
@@ -278,7 +283,7 @@ class network_device():
                     log('Interface {} merged with old interface'.
                         format(new_interf.interface_name), 
                         proc= proc,
-                        v = util.D)
+                        v= logging.D)
                     # For each variable in the interface class, compare and overwrite new ones.
                     for key in gvars(new_interf).keys():
                         gvars(old_interf)[key] = gvars(new_interf)[key] 
@@ -294,15 +299,11 @@ class network_device():
     def get_ips(self):
         """Returns a list of IP addresses aggregated from interfaces."""
         
-        output = []
-        for interf in self.interfaces:
-            
-            # if the interface exists and if it matches an IP address
-            if (interf.interface_ip and 
-                re.search(r"(1[0-9]{1,3}(?:\.\d{1,3}){3})", interf.interface_ip, flags=re.I)):
-                output.append(interf.interface_ip) 
+        # Get the IP from each interface
+        output = [i.interface_ip for i in self.interfaces if is_ip(i)]
         
-        for ip in self.other_ips: output.append(ip)
+        # Add any other IP's it has
+        output.extend(self.other_ips)
             
         return output
 
@@ -310,16 +311,12 @@ class network_device():
     def unique_name(self, name= True, serials= True):
         """Returns a unique identifier for this device"""
         
-        output = []
-        
         if not (self.device_name or self.serial_numbers):
             return None
         
-        if name and self.device_name: 
-#             if len(self.device_name) > 16:
-#                 output.append(self.device_name[-16:])
-#             else:
-            output.append(self.device_name)
+        output = []
+        
+        if name and self.device_name: output.append(self.device_name)
         
         # Make a hash of the serials        
         if serials and len(self.serial_numbers) > 0:
@@ -328,7 +325,7 @@ class network_device():
                 h.update(x['serialnum'].encode())
             output.append(h.hexdigest()[:5])
         
-        return '_'.join(output)
+        return '_'.join(output).upper()
         
     
     def first_serial(self):
@@ -336,11 +333,15 @@ class network_device():
         else: return self.serial_numbers[0]['serialnum']
     
     
-    def normalize_netmasks(self):
+    def _normalize_netmasks(self):
         for i in self.interfaces:
             try: netmask= util.cidr_to_netmask(i.interface_subnet)
-            except: pass
+            except ValueError: pass
             else: i.interface_subnet= netmask
+    
+    
+    def _normalize_mac_address(self, mac):
+        return ''.join([x.upper() for x in mac if re.match(r'\w', x)])
             
     
     def enable(self, attempts= 3):
@@ -356,22 +357,19 @@ class network_device():
             # Attempt to enter enable mode
             try: self.connection.enable()
             except Exception as e: 
-                log('Enable failed on attempt %s. Current delay: %s' % (str(i+1), 
-                    self.connection.global_delay_factor), 
-                    ip= self.connection.ip, proc= proc, v= util.A, error= e)
+                log('Enable failed on attempt %s.' % (str(i+1)), 
+                    ip= self.connection.ip, proc= proc, v= logging.A, error= e)
                 
                 # At the final try, return the failed device.
                 if i >= attempts-1: 
                     raise ValueError('Enable failed after {} attempts'.format(i))
                 
                 # Otherwise rest for one second longer each time and then try again
-                self.connection.global_delay_factor += gvars.DELAY_INCREASE
                 sleep(i+2)
                 continue
             else: 
-                log('Enable successful on attempt %s. Current delay: %s' % 
-                    (str(i+1), self.connection.global_delay_factor), 
-                    ip= self.connection.ip, proc= proc, v= util.D)
+                log('Enable successful on attempt %s' % (str(i+1)), 
+                    ip= self.connection.ip, proc= proc, v= logging.D)
                 
                 return True
     
@@ -380,14 +378,14 @@ class network_device():
         '''Main method which fully populates the network_device'''
         proc= 'base_device.process_devices'
         
-        log ('Processing device', proc= proc, v=util.I)
+        log('Processing device', proc= proc, v= logging.N)
         
         # Connect to the device
         try: result= cli.start_cli_session(handler= ConnectHandler,
                                           netmiko_platform= self.netmiko_platform,
                                           ip= self.ip,
                                           )
-        except IOError as e:
+        except Exception as e:
             self.alert('Connection failed', proc= proc)
             raise
         
@@ -423,17 +421,18 @@ class network_device():
             self.get_other_ips(),
             self.get_cdp_neighbors(),
             self.get_mac_address_table(),
-            self.normalize_netmasks()       # Must be after all IP polling
+            self._normalize_netmasks()       # Must be after all IP polling
             ):
             try: 
                 fn
             except Exception as e:
                 self.alert(fn.__name__ + ' - Error: ' + str(e), proc= proc)
-                if not gvars.SUPPRESS_ERRORS: raise
+                if gvars.RAISE_ERRORS: raise
                
         
-        log('Finished polling {}'.format(self.unique_name()), proc= proc, v= util.H)
+        log('Finished polling {}'.format(self.unique_name()), proc= proc, v= logging.H)
         self.connection.disconnect()
+        self.connection= None
         return True
     
     
