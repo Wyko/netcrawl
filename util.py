@@ -27,6 +27,19 @@ def getCreds():
     return [{'user': username, 'password': password, 'type': 'User Entered'}]  
 
 
+def contains_mac_address(mac):
+    '''Simple boolean operator to determine if a string contains a mac anywhere
+    within it.'''
+    return bool(re.search(r'''
+        (?:
+            [0-9A-F]{2,4}  # Match 2-4 Hex characters
+            [\:\-\.]       # Seperated by :, -, or .
+        ){2,7}             # match it between 2 and 7 times
+            [0-9A-F]{2,4}  # Followed by one last set of Hex
+        ''', 
+        mac, re.I|re.X))
+
+
 def parse_ip(raw_input):
     """Returns a list of strings containing each IP address 
     matched in the input string."""
@@ -63,12 +76,17 @@ def cidr_to_netmask(cidr):
     just added some error checking.'''
     
     # Strip any non digit characters
-    if type(cidr) == str: 
+    if isinstance(cidr, str): 
         cidr= int(re.sub(r'\D', '', str(cidr)))
-    else: cidr= int(cidr)
+    
+    try: cidr= int(cidr)
+    except Exception as e: 
+        raise ValueError('Input CIDR [{}] not a valid netmask. '
+                         'Error [{}]'.format(cidr, str(e)))
     
     if not (0 <= cidr <= 32):
-        raise ValueError('Input CIDR not recognized as a valid netmask')
+        raise ValueError('Input CIDR [{}] not a valid '
+                         'netmask.'.format(cidr))
      
     return '.'.join([str((0xffffffff << (32 - cidr) >> i) & 0xff)
                     for i in [24, 16, 8, 0]])

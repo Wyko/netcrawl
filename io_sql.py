@@ -5,7 +5,6 @@ from psycopg2 import errorcodes
 
 import psycopg2, wylog, time, traceback
 from importlib._bootstrap import _exec
-from io_sqlite import sql_database
 
 retry_args= {'stop_max_delay': 60000, # Stop after 60 seconds
              'wait_exponential_multiplier': 100, # Exponential backoff
@@ -186,19 +185,18 @@ class main_db(sql_database):
         self.DB_NAME = 'main'
         sql_database.__init__(self, self.DB_NAME, **kwargs)
         
-        self.resume = kwargs.get('resume', True)
+        self.ignore_visited = kwargs.get('ignore_visited', True)
         
         with self.conn, self.conn.cursor() as cur, log_sql_execution(proc):
-            # If resuming, then reset the working tag for 
-            # any existing pending devices
-            if self.resume:
-                cur.execute('''
-                    UPDATE pending 
-                    SET working= FALSE
-                ''')
-            else:
-                # Otherwise, delete everything in the table
-                cur.execute('DELETE FROM pending')
+
+            # Delete everything in the visited table
+            if self.ignore_visited: cur.execute('DELETE FROM visited')
+            
+            # Then set all pending entries as not working
+            cur.execute('''
+                UPDATE pending 
+                SET working= FALSE
+            ''')
 
     
     def __len__(self):
@@ -278,7 +276,7 @@ class main_db(sql_database):
         # Pending dict template
         _device_d = {
             'device_name': None,
-            'ip': None,
+            'ip_list': None,
             'netmiko_platform': None,
             'system_platform': None,
             'source_interface': None,
@@ -301,52 +299,55 @@ class main_db(sql_database):
         else: return False
         
         # Break if no IP address or platform was supplied
-        if ((_device_d['ip'] is None) or 
-            (_device_d['netmiko_platform'] is None)): 
-            raise ValueError(proc+ ': No IP or platform was supplied in [{}]'.format(_device_d))
-        
-        if (sql_database.ip_exists(self, _device_d['ip'], 'visited') or
-            sql_database.ip_exists(self, _device_d['ip'], 'pending')):
-            log('[{}] already in visited or/and pending database'.format(_device_d['ip']),
-                v= logging.I, proc= proc, ip= _device_d['ip'])
+        if ((_device_d['ip_list'] is None) or
+            (len(_device_d['ip_list']) == 0 or
+            (_device_d['netmiko_platform'] is None))): 
+            return False
         
         with self.conn, self.conn.cursor() as cur:
-            with log_sql_execution(proc):
-                cur.execute('''
-                    INSERT INTO pending  
-                        (
-                        working,
-                        ip,
-                        device_name,
-                        netmiko_platform,
-                        system_platform,
-                        source_interface,
-                        neighbor_interface,
-                        software,
-                        raw_cdp
-                        )
-                    VALUES 
-                        (FALSE, 
-                        %(ip)s, 
-                        %(device_name)s, 
-                        %(netmiko_platform)s, 
-                        %(system_platform)s, 
-                        %(source_interface)s, 
-                        %(neighbor_interface)s, 
-                        %(software)s, 
-                        %(raw_cdp)s 
-                    );
-                    ''',
-                    {
-                    'ip': _device_d['ip'],
-                    'device_name': _device_d['device_name'],
-                    'netmiko_platform': _device_d['netmiko_platform'],
-                    'system_platform': _device_d['system_platform'],
-                    'source_interface': _device_d['source_interface'],
-                    'neighbor_interface': _device_d['neighbor_interface'],
-                    'software': _device_d['software'],
-                    'raw_cdp': _device_d['raw_cdp'],
-                    } )
+            for ip in _device_d['ip_list']:
+                if (sql_database.ip_exists(self, ip, 'visited') or
+                    sql_database.ip_exists(self, ip, 'pending')):
+                    log('[{}] already in visited or/and pending database'.format(ip),
+                        v= logging.I, proc= proc)
+                    continue
+                
+                with log_sql_execution(proc):
+                    cur.execute('''
+                        INSERT INTO pending  
+                            (
+                            working,
+                            ip,
+                            device_name,
+                            netmiko_platform,
+                            system_platform,
+                            source_interface,
+                            neighbor_interface,
+                            software,
+                            raw_cdp
+                            )
+                        VALUES 
+                            (FALSE, 
+                            %(ip)s, 
+                            %(device_name)s, 
+                            %(netmiko_platform)s, 
+                            %(system_platform)s, 
+                            %(source_interface)s, 
+                            %(neighbor_interface)s, 
+                            %(software)s, 
+                            %(raw_cdp)s 
+                        );
+                        ''',
+                        {
+                        'ip': ip,
+                        'device_name': _device_d['device_name'],
+                        'netmiko_platform': _device_d['netmiko_platform'],
+                        'system_platform': _device_d['system_platform'],
+                        'source_interface': _device_d['source_interface'],
+                        'neighbor_interface': _device_d['neighbor_interface'],
+                        'software': _device_d['software'],
+                        'raw_cdp': _device_d['raw_cdp'],
+                        } )
         
     
     def add_device_pending_neighbors(self, _device= None, _list= None):
@@ -382,17 +383,9 @@ class main_db(sql_database):
                         neighbor), v=logging.I, proc= proc)
                     continue
                     
-                if (('ip' in neighbor) and 
-                    (isinstance(neighbor['ip'], str))):
-                    # Add it to the list of ips to check
-                    self.add_pending_device_d(neighbor)
+                # Add it to the list of ips to check
+                self.add_pending_device_d(neighbor)
                     
-                else:
-                    log('Neighbor does not have a valid ip. Neighbor: [{}]'.format(
-                        neighbor), proc= proc, v= logging.A)
-                    continue
-
-    
     def create_table(self, drop_tables= True):
         proc= 'main_db.create_table'
         log('Creating main.db tables',
@@ -583,6 +576,19 @@ class device_db(sql_database):
         return sql_database.ip_exists(self, ip, 'interfaces')
     
     
+    def unique_name_exists(self, name):
+        # Do everything in one transaction
+        with self.conn, self.conn.cursor() as cur:
+            cur.execute('''
+                select exists 
+                (select * from devices 
+                where unique_name = %s
+                limit 1);
+                ''',
+                (name.upper(), ) )
+            return cur.fetchone()[0] # Returns a (False,) tuple)
+    
+    
     def add_device_nd(self, _device= None, _list= None):
         """Appends a device or a list of devices to the database
         
@@ -626,13 +632,15 @@ class device_db(sql_database):
                     for mac_address in interf.mac_address_table:
                         mac_id= self.insert_mac_entry(device_id, interface_id, mac_address, cur)
                     
-                    # Add each neighbor that was matched to an interface
+                    # Add each neighbor + ip that was matched to an interface
                     for neighbor in interf.neighbors:
                         neighbor_id= self.insert_neighbor_entry(device_id, interface_id, neighbor, cur)
+                        for n_ip in neighbor: self.insert_neighbor_ip_entry(neighbor_id, n_ip, cur)
                     
-                # Add each neighbor not matched to an interface
+                # Add each neighbor + ip not matched to an interface
                 for neighbor in _device.neighbors:
                     neighbor_id= self.insert_neighbor_entry(device_id, None, neighbor, cur)
+                    for n_ip in neighbor: self.insert_neighbor_ip_entry(neighbor_id, n_ip, cur)
                     
         self.conn.commit()
         return True
@@ -654,7 +662,8 @@ class device_db(sql_database):
                 raw_cdp,
                 raw_config,
                 failed,
-                failed_msg,
+                error_log,
+                processing_error,
                 TCP_22,
                 TCP_23,
                 username,
@@ -670,7 +679,8 @@ class device_db(sql_database):
                 %(raw_cdp)s,
                 %(raw_config)s,
                 %(failed)s,
-                %(failed_msg)s,
+                %(error_log)s,
+                %(processing_error)s,
                 %(TCP_22)s,
                 %(TCP_23)s,
                 %(username)s,
@@ -688,7 +698,8 @@ class device_db(sql_database):
                 'raw_cdp': _device.raw_cdp,
                 'raw_config': _device.config,
                 'failed': _device.failed,
-                'failed_msg': _device.failed_msg,
+                'error_log': _device.error_log,
+                'processing_error': _device.processing_error,
                 'TCP_22': _device.TCP_22,
                 'TCP_23': _device.TCP_23,
                 'username': _device.credentials.get('user', None),
@@ -784,7 +795,7 @@ class device_db(sql_database):
             RETURNING neighbor_ip_id;
             ''',
             {
-            'parent': neighbor_id,
+            'neighbor_id': neighbor_id,
             'ip': ip,
             })
         return cur.fetchone()[0]
@@ -883,7 +894,8 @@ class device_db(sql_database):
                         raw_cdp            TEXT,
                         raw_config         TEXT,
                         failed             BOOLEAN,
-                        failed_msg         TEXT,
+                        error_log          TEXT,
+                        processing_error   BOOLEAN,
                         TCP_22             BOOLEAN,
                         TCP_23             BOOLEAN,
                         username           TEXT,
@@ -945,10 +957,6 @@ class device_db(sql_database):
                         neighbor_interface TEXT,
                         software           TEXT,
                         raw_cdp            TEXT,
-                        pending            BOOLEAN,
-                        working            BOOLEAN,
-                        failed             BOOLEAN,
-                        failed_msg         TEXT,
                         updated            TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
                         FOREIGN KEY(device_id) REFERENCES Devices(device_id) 
                             ON DELETE CASCADE ON UPDATE CASCADE,

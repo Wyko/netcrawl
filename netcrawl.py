@@ -20,7 +20,8 @@ def normal_run(**kwargs):
 
     # Add the seed device if a target was specified  
     if ('target' in kwargs) and (kwargs['target'] is not None):
-        main_db.add_pending_device_d(ip= kwargs['target'], 
+        main_db.add_pending_device_d(
+            ip_list= [kwargs['target']], 
             netmiko_platform= kwargs.get('netmiko_platform', 'unknown'))
 
     # Set the number of sub-processes
@@ -183,7 +184,7 @@ class worker(multiprocessing.Process):
             
             # Create an inherited device class object
             try: result['device']= create_instantiated_device(**next_device)
-            except TypeError as e:
+            except Exception as e:
                 log('Device [{}] could not be instantiated: [{}]'.format(
                     next_device.get('ip'), str(e)), 
                     v=logging.C, proc= proc)
@@ -246,7 +247,7 @@ def _scan_host(h, nm):
             return {
                     'netmiko_platform': 'unknown',
                     'raw_cdp': json.dumps(nm[h], sort_keys=True, indent=4),
-                    'ip': h,
+                    'ip_list': [h],
                     }
 
 def scan_range(_target, **kwargs):
@@ -272,10 +273,12 @@ def scan_range(_target, **kwargs):
     
     for r in results:
         result= r.get()
-        print(result)
         
         if isinstance(result, dict):
+            log('Got result [{}]'.format(result), proc= proc, v= logging.N)
             main_db.add_pending_device_d(result)
+        else:
+            log('Result [{}]'.format(result), proc= proc, v= logging.N)
         
     log('Finished scanning hosts', proc= proc, v= logging.H)
 
@@ -340,16 +343,29 @@ def parse_cli():
     
 
     polling.add_argument(
-        '-r',
-        '--resume',
+        '-i',
+        '--ignore',
         action="store_true",
-        dest= 'resume',
+        dest= 'ignore_visited',
         help= textwrap.dedent(
         '''\
-        Resume the last scan, if one was interrupted midway. Omitting
-            this argument is not the same as using -c; Previous database
-            entries are maintained. Scan starts with the seed device. All
-            neighbor entries marked pending are reset.
+        Do not resume the last scan if one was interrupted midway. Omitting
+            this argument is not the same as using -c; Previous device database
+            entries are maintained, but all visited entries are removed. 
+        '''),
+        default = False
+        )
+    
+    polling.add_argument(
+        '-u',
+        '--update',
+        action="store_true",
+        dest= 'update',
+        help= textwrap.dedent(
+        '''\
+        Iterates through all previously-found devices and scans them again. 
+            This implies the --ignore flag in that it also removes previous 
+            visited entries.
         '''),
         default = False
         )
@@ -445,13 +461,13 @@ def parse_cli():
         dest= 'platform',
         metavar= 'PLATFORM',
         help= 'The Netmiko platform for the device',
-        default = 'Unknown'
+        default = 'unknown'
         )
     
     args = parser.parse_args()
     
-#     if (not args.host):
-#         parser.error('Host not specified')
+     
+    if args.update: args.ignore_visited = True
      
     return args
 
@@ -487,7 +503,7 @@ if __name__ == "__main__":
             normal_run(
                 target= args.host, 
                 netmiko_platform= args.platform, 
-                resume= args.resume,
+                ignore_visited= args.ignore_visited,
                 clean= args.clean,
                 )
             log('##### Recursive Run Complete #####', proc= proc, v= logging.H)
@@ -497,7 +513,7 @@ if __name__ == "__main__":
             single_run(
                 ip= args.host, 
                 netmiko_platform= args.platform,
-                resume= args.resume,
+                ignore_visited= args.ignore_visited,
                 clean= args.clean,
                 )
             log('##### Single Run Complete #####', proc= proc, v= logging.H)

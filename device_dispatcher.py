@@ -93,9 +93,7 @@ def autodetect(target):
                                                )['connection']
         except IOError as e:
             log('Autodetect connection failed.', proc= proc, v= logging.A)
-            
-            raise IOError(proc+ 
-                ': Autodetect connection failed with error [{}]'.format(str(e)))
+            raise
         
         # Use the resulting connection object to perform the autodetection        
         ad= connection.autodetect()

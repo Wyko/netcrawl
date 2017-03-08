@@ -5,6 +5,7 @@ from netmiko import ConnectHandler
 from wylog import log, logging
 
 import re, hashlib, util, os, gvars, cli
+from util import is_ip
 
 
 class interface():
@@ -67,8 +68,9 @@ class network_device():
         self.other_ips= []
         
         # Other Args
-        self.failed_msg = ''
+        self.processing_error= False
         self.failed = False
+        self.error_log = ''
         
         
     def __str__(self):
@@ -143,10 +145,11 @@ class network_device():
                 
     
     
-    def alert(self, msg, proc, failed= True, v= logging.A, ip= None):
+    def alert(self, msg, proc, failed= False, v= logging.A, ip= None):
         '''Populates the failed messages variable for the device'''
-        self.failed = failed
-        self.failed_msg += '{} - IP [{}]: {} | '.format(proc, ip, msg)
+        if failed: self.failed = failed
+        self.error = True
+        self.error_log += '{} - IP [{}]: {} | '.format(proc, ip, msg)
         
         log(msg= msg, proc= proc, v= v, ip= ip)
     
@@ -296,15 +299,11 @@ class network_device():
     def get_ips(self):
         """Returns a list of IP addresses aggregated from interfaces."""
         
-        output = []
-        for interf in self.interfaces:
-            
-            # if the interface exists and if it matches an IP address
-            if (interf.interface_ip and 
-                re.search(r"(1[0-9]{1,3}(?:\.\d{1,3}){3})", interf.interface_ip, flags=re.I)):
-                output.append(interf.interface_ip) 
+        # Get the IP from each interface
+        output = [i.interface_ip for i in self.interfaces if is_ip(i)]
         
-        for ip in self.other_ips: output.append(ip)
+        # Add any other IP's it has
+        output.extend(self.other_ips)
             
         return output
 
@@ -312,16 +311,12 @@ class network_device():
     def unique_name(self, name= True, serials= True):
         """Returns a unique identifier for this device"""
         
-        output = []
-        
         if not (self.device_name or self.serial_numbers):
             return None
         
-        if name and self.device_name: 
-#             if len(self.device_name) > 16:
-#                 output.append(self.device_name[-16:])
-#             else:
-            output.append(self.device_name)
+        output = []
+        
+        if name and self.device_name: output.append(self.device_name)
         
         # Make a hash of the serials        
         if serials and len(self.serial_numbers) > 0:
@@ -330,7 +325,7 @@ class network_device():
                 h.update(x['serialnum'].encode())
             output.append(h.hexdigest()[:5])
         
-        return '_'.join(output)
+        return '_'.join(output).upper()
         
     
     def first_serial(self):
@@ -338,11 +333,15 @@ class network_device():
         else: return self.serial_numbers[0]['serialnum']
     
     
-    def normalize_netmasks(self):
+    def _normalize_netmasks(self):
         for i in self.interfaces:
-            try: netmask= logging.C(i.interface_subnet)
-            except: pass
+            try: netmask= util.cidr_to_netmask(i.interface_subnet)
+            except ValueError: pass
             else: i.interface_subnet= netmask
+    
+    
+    def _normalize_mac_address(self, mac):
+        return ''.join([x.upper() for x in mac if re.match(r'\w', x)])
             
     
     def enable(self, attempts= 3):
@@ -379,7 +378,7 @@ class network_device():
         '''Main method which fully populates the network_device'''
         proc= 'base_device.process_devices'
         
-        log ('Processing device', proc= proc, v= logging.I)
+        log('Processing device', proc= proc, v= logging.N)
         
         # Connect to the device
         try: result= cli.start_cli_session(handler= ConnectHandler,
@@ -422,7 +421,7 @@ class network_device():
             self.get_other_ips(),
             self.get_cdp_neighbors(),
             self.get_mac_address_table(),
-            self.normalize_netmasks()       # Must be after all IP polling
+            self._normalize_netmasks()       # Must be after all IP polling
             ):
             try: 
                 fn

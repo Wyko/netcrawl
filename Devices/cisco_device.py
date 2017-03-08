@@ -8,7 +8,7 @@ from Devices.base_device import network_device, interface
 from wylog import log, logging
 from util import parse_ip
 from time import sleep
-import re, gvars
+import re, gvars, util
 
 class cisco_device(network_device):
         
@@ -112,7 +112,9 @@ class cisco_device(network_device):
             else: 
                 return None
     
-
+    
+    
+    
     def get_mac_address_table(self, attempts= 3):
         '''Populates self.mac_address_table from the remote device.
         
@@ -129,12 +131,12 @@ class cisco_device(network_device):
         # Try the two command formats
         try: self.raw_mac_address_table = self.attempt('show mac address-table', 
                          proc= proc, 
-                         fn_check= lambda x: bool(re.search(r'(?:[0-9A-F]{2,4}[\:\-\.]){2,7}[0-9A-F]{2,4}', x, re.I)),
+                         fn_check= util.contains_mac_address,
                          alert= False)
         except: 
             try: self.raw_mac_address_table = self.attempt('show mac-address-table', 
                          proc= proc, 
-                         fn_check= lambda x: bool(re.search(r'(?:[0-9A-F]{2,4}[\:\-\.]){2,7}[0-9A-F]{2,4}', x, re.I)),
+                         fn_check= util.contains_mac_address,
                          alert= False)
             except:
                 log('No MAC addresses found.', proc= proc, v= logging.A)
@@ -156,7 +158,8 @@ class cisco_device(network_device):
                 )    
             )
             \s*?$                    # Match if interface is at the end of the line
-            ''', self.raw_mac_address_table, flags= (re.X | re.I | re.M) )
+            ''', 
+            self.raw_mac_address_table, flags= (re.X | re.I | re.M) )
 
         # Return a dictionary containing the MAC's and interfaces
         self.mac_address_table= [m.groupdict() for m in output]
@@ -164,7 +167,7 @@ class cisco_device(network_device):
         count= 0
         for mac in self.mac_address_table:
             # Ignore blank mac addresses
-            if mac == 'ffff.ffff.ffff': continue
+            if mac['mac_address'] == 'ffff.ffff.ffff': continue
             
             count+=1 
             
@@ -177,6 +180,9 @@ class cisco_device(network_device):
                 interf.interface_description= '**** Matched from MAC Address, not interface list'
                 interf.interface_name= mac['interface_name']
                 self.interfaces.append(interf)
+            
+            # Normalize the MAC
+            mac['mac_address']= self._normalize_mac_address(mac['mac_address'])
             
             # Add the MAC to the interface
             interf.mac_address_table.append(mac['mac_address'])
@@ -333,16 +339,11 @@ class cisco_device(network_device):
             'neighbor_interface': None,
             'software': None,
             'raw_cdp': cdp_input,
-            'ip': None,
-            'other_ips': []
+            'ip_list': None,
             }
         
         # Get each IP address
-        ip_list = parse_ip(cdp_input)
-        
-        for i, ip in enumerate(ip_list):
-            if i==0: output['ip'] = ip
-            else: output['other_ips'].append(ip)
+        output['ip_list'] = parse_ip(cdp_input)
         
         output['netmiko_platform'] = self.parse_netmiko_platform(cdp_input)
         
