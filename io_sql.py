@@ -6,8 +6,8 @@ from psycopg2 import errorcodes
 import psycopg2, wylog, time, traceback
 from importlib._bootstrap import _exec
 
-retry_args= {'stop_max_delay': 60000, # Stop after 60 seconds
-             'wait_exponential_multiplier': 100, # Exponential backoff
+retry_args = {'stop_max_delay': 60000,  # Stop after 60 seconds
+             'wait_exponential_multiplier': 100,  # Exponential backoff
              'wait_exponential_max': 10000,
 #             'retry_on_exception': ( # Only retry on this exception
 #                 lambda x: isinstance(x, sqlite3.OperationalError)
@@ -20,7 +20,7 @@ class sql_logger():
     '''Utility class to enable logging of SQL execute statements, 
     as well as handling specific errors'''
     
-    def __init__(self, proc, ignore_duplicates= True):
+    def __init__(self, proc, ignore_duplicates=True):
         self.proc = proc
         
         # If a duplicate constraint is hit, ignore it.
@@ -28,7 +28,7 @@ class sql_logger():
         
     def __enter__(self):
         log('Beginning execution in [{}]'.format(self.proc),
-            proc= self.proc, v= logging.D)
+            proc=self.proc, v=logging.D)
         self.start = time.time()
         
     def __exit__(self, ty, val, tb):
@@ -37,7 +37,7 @@ class sql_logger():
         # Ignore the problem if we just added a duplicate
         if ty is None:
             log('SQL execution in [{}] completed without error. Duration: [{:.3f}]'.format(
-                self.proc, end-self.start), proc= self.proc, v= logging.D)
+                self.proc, end - self.start), proc=self.proc, v=logging.D)
         
         # Handle duplicate entry violations    
         elif (ty is psycopg2.IntegrityError) and self.ignore_duplicates:
@@ -45,24 +45,24 @@ class sql_logger():
                                errorcodes.NOT_NULL_VIOLATION,
                 )):
                 log('SQL execution in [{}] completed. Null or Unique constraint hit [{}]. Duration: [{:.3f}]'.format(
-                    self.proc, val.pgerror, end-self.start), proc= self.proc, v= logging.I)
+                    self.proc, val.pgerror, end - self.start), proc=self.proc, v=logging.I)
                 return True
                 
         else:
             log('Finished SQL execution in [{}] after [{:.3f}] seconds with [{}] error [{}]. Traceback: [{}]'.format(
-                self.proc, end-self.start, ty.__name__, str(val), traceback.format_tb(tb)),
-                proc= self.proc, v= logging.I)
+                self.proc, end - self.start, ty.__name__, str(val), traceback.format_tb(tb)),
+                proc=self.proc, v=logging.I)
 
 
 class sql_database():
     def __init__(self, dbname, **kwargs):
         # Create the tables in each database, overwriting if needed
-        clean= kwargs.get('clean', False)
+        clean = kwargs.get('clean', False)
         self.create_database(dbname)
         
-        self.conn = psycopg2.connect(dbname= dbname, user='wyko', password='pass', host='localhost')
+        self.conn = psycopg2.connect(dbname=dbname, user='wyko', password='pass', host='localhost')
         
-        self.create_table(drop_tables= clean)
+        self.create_table(drop_tables=clean)
     
     """
     def delete_database(self, db_name, cur= None):
@@ -105,12 +105,12 @@ class sql_database():
     def create_database(self, new_db):
         '''Creates a new database'''
         
-        proc= 'sql_database.create_database'
+        proc = 'sql_database.create_database'
         
         with psycopg2.connect(dbname='postgres', user='wyko', password='pass', host='localhost') as conn:
             with conn.cursor() as cur, sql_logger(proc):
-                cur.execute("SELECT 1 from pg_database WHERE datname= %s", (new_db, ))
-                exists= bool(cur.fetchone()) 
+                cur.execute("SELECT 1 from pg_database WHERE datname= %s", (new_db,))
+                exists = bool(cur.fetchone()) 
             
         if not exists:
             with psycopg2.connect(dbname='postgres', user='wyko', password='pass', host='localhost') as conn:
@@ -125,10 +125,10 @@ class sql_database():
 
     def ip_exists(self, ip, table):
         '''Check if a given IP exists in the database'''
-        proc= 'sql_database.ip_exists'
+        proc = 'sql_database.ip_exists'
         
         if ip is None or table is None:
-            raise ValueError(proc+ ': IP[{}] or Table[{]] missing'.format(
+            raise ValueError(proc + ': IP[{}] or Table[{]] missing'.format(
                 ip, table))
         
         with self.conn, self.conn.cursor() as cur:
@@ -137,20 +137,20 @@ class sql_database():
                 (select * from {t} 
                 where ip= %(ip)s 
                 limit 1);
-                '''.format(t= table),
+                '''.format(t=table),
                 {'ip': ip}
                 )
-            return cur.fetchone()[0] # Returns a (False,) tuple
+            return cur.fetchone()[0]  # Returns a (False,) tuple
         
         
-    def ip_name_exists(self, ip, name, table, cur= None):
+    def ip_name_exists(self, ip, name, table, cur=None):
         '''Check if a given IP OR Name exists in the database'''
-        proc= 'sql_database.ip_name_exists'
+        proc = 'sql_database.ip_name_exists'
         
         if None in (ip,
                     table,
                     name):
-            raise ValueError(proc+ ': IP[{}], Name [{}] or Table[{]] missing'.format(
+            raise ValueError(proc + ': IP[{}], Name [{}] or Table[{]] missing'.format(
                 ip, name, table))
         
         with self.conn, self.conn.cursor() as cur:
@@ -163,12 +163,12 @@ class sql_database():
                         device_name= %(device)s
                     limit 1);''',
                 {'table': table, 'ip': ip, 'device': name})
-            return cur.fetchone()[0] # Returns a (False,) tuple
+            return cur.fetchone()[0]  # Returns a (False,) tuple
         
     
     def count(self, table):
         '''Counts the number of rows in the table'''
-        proc= 'io_sql.count'
+        proc = 'io_sql.count'
         
         with self.conn, self.conn.cursor() as cur:
             cur.execute('SELECT count(*) as exact_count from {}'.format(table))
@@ -178,7 +178,7 @@ class sql_database():
 class main_db(sql_database):
     
     def __init__(self, **kwargs):
-        proc= 'main_db.__init__'
+        proc = 'main_db.__init__'
         
         self.DB_NAME = 'main'
         sql_database.__init__(self, self.DB_NAME, **kwargs)
@@ -215,11 +215,11 @@ class main_db(sql_database):
     
     def remove_pending_record(self, _id):
         '''Removes a record from the pending table''' 
-        proc= 'main_db.remove_processed'
+        proc = 'main_db.remove_processed'
         
         # Error checking
         assert isinstance(_id, int), (
-            proc+ ': _id [{}] is not int'.format(type(_id)))
+            proc + ': _id [{}] is not int'.format(type(_id)))
         
         # Delete the processed entry
         with self.conn, self.conn.cursor() as cur:
@@ -228,7 +228,7 @@ class main_db(sql_database):
                     pending
                 WHERE
                     pending_id = %s
-                ''', (_id, ))
+                ''', (_id,))
         
 
     def get_next(self):
@@ -238,10 +238,10 @@ class main_db(sql_database):
             Dict: The next pending device as a dictionary object
                 with the names of the rows as keys.
         '''
-        proc= 'main_db.get_next'
+        proc = 'main_db.get_next'
         
         # User a special cursor which returns results as dicts
-        with self.conn, self.conn.cursor(cursor_factory= RealDictCursor) as cur:        
+        with self.conn, self.conn.cursor(cursor_factory=RealDictCursor) as cur:        
             cur.execute('''
                 SELECT * FROM 
                     pending 
@@ -258,8 +258,8 @@ class main_db(sql_database):
                     UPDATE pending 
                     SET working= TRUE
                     WHERE pending_id= %s
-                    ''', 
-                    (output['pending_id'], ))
+                    ''',
+                    (output['pending_id'],))
                 
                 # Return the next device
                 output = dict(output)
@@ -268,8 +268,8 @@ class main_db(sql_database):
             else: return None
     
     
-    def add_pending_device_d(self, device_d= None, cur= None, **kwargs):
-        proc= 'main_db.add_pending_device_d'
+    def add_pending_device_d(self, device_d=None, cur=None, **kwargs):
+        proc = 'main_db.add_pending_device_d'
         
         # Pending dict template
         _device_d = {
@@ -307,7 +307,7 @@ class main_db(sql_database):
                 if (sql_database.ip_exists(self, ip, 'visited') or
                     sql_database.ip_exists(self, ip, 'pending')):
                     log('[{}] already in visited or/and pending database'.format(ip),
-                        v= logging.I, proc= proc)
+                        v=logging.I, proc=proc)
                     continue
                 
                 with sql_logger(proc):
@@ -345,10 +345,10 @@ class main_db(sql_database):
                         'neighbor_interface': _device_d['neighbor_interface'],
                         'software': _device_d['software'],
                         'raw_cdp': _device_d['raw_cdp'],
-                        } )
+                        })
         
     
-    def add_device_pending_neighbors(self, _device= None, _list= None):
+    def add_device_pending_neighbors(self, _device=None, _list=None):
         """Appends a device or a list of devices to the database
         
         Optional Args:
@@ -358,18 +358,18 @@ class main_db(sql_database):
         Returns:
             Boolean: True if write was successful, False otherwise.
         """
-        proc= 'main_db.add_device_pending_neighbors'
-        if not _list: _list= []
+        proc = 'main_db.add_device_pending_neighbors'
+        if not _list: _list = []
         
-        log('Adding neighbors to pending table', proc= proc,
-            v= logging.N)
+        log('Adding neighbors to pending table', proc=proc,
+            v=logging.N)
         
         # If a single device was passed, add it to the list
         if _device: _list.append(_device)
         
         # Return an error if no data was passed
         if not _list: 
-            log('No devices to add', proc= proc, v= logging.A)
+            log('No devices to add', proc=proc, v=logging.A)
             return False
         
         # Process each device in one transaction
@@ -378,16 +378,16 @@ class main_db(sql_database):
                 
                 if not neighbor.get('netmiko_platform'):
                     log('Neighbor [{}] has no platform. Skipping'.format(
-                        neighbor), v=logging.I, proc= proc)
+                        neighbor), v=logging.I, proc=proc)
                     continue
                     
                 # Add it to the list of ips to check
                 self.add_pending_device_d(neighbor)
                     
-    def create_table(self, drop_tables= True):
-        proc= 'main_db.create_table'
+    def create_table(self, drop_tables=True):
+        proc = 'main_db.create_table'
         log('Creating main.db tables',
-            proc= proc, v= logging.I)
+            proc=proc, v=logging.I)
         
         with self.conn, self.conn.cursor() as cur:
             if drop_tables: 
@@ -422,8 +422,8 @@ class main_db(sql_database):
                 ''')
 
     
-    def add_visited_device_d(self, device_d= None, cur= None, **kwargs):
-        proc= 'main_db.add_visited_device_d'
+    def add_visited_device_d(self, device_d=None, cur=None, **kwargs):
+        proc = 'main_db.add_visited_device_d'
         
         _device_d = {
             'device_name': None,
@@ -445,7 +445,7 @@ class main_db(sql_database):
         
         # Break if no IP addres was supplied
         if _device_d['ip'] is None: 
-            raise ValueError(proc+ ': No IP or platform was supplied in [{}]'.format(_device_d))
+            raise ValueError(proc + ': No IP or platform was supplied in [{}]'.format(_device_d))
         
         def _execute(_device_d, cur):        
             with sql_logger(proc):    
@@ -462,7 +462,7 @@ class main_db(sql_database):
                         );
                     ''',
                     {
-                    'ip': _device_d['ip'], # Must have an IP
+                    'ip': _device_d['ip'],  # Must have an IP
                     'device_name': _device_d['device_name'],
                     })
             
@@ -476,7 +476,7 @@ class main_db(sql_database):
         
     
     
-    def add_visited_device_nd(self, _device= None, _list= None, cur= None):
+    def add_visited_device_nd(self, _device=None, _list=None, cur=None):
         """Appends a device or a list of devices to the database
         
         Optional Args:
@@ -486,12 +486,12 @@ class main_db(sql_database):
         Returns:
             Boolean: True if write was successful, False otherwise.
         """ 
-        proc= 'main_db.add_visited_device_nd'
+        proc = 'main_db.add_visited_device_nd'
         
-        if not _list: _list= []
+        if not _list: _list = []
         
-        log('Adding device(s) to  table.'.format(self.DB_NAME), 
-            proc= proc, v= logging.N)
+        log('Adding device(s) to  table.'.format(self.DB_NAME),
+            proc=proc, v=logging.N)
         
         # If a single device was passed, add it to the list so that we can
         # simplify the code later on
@@ -499,8 +499,8 @@ class main_db(sql_database):
         
         # Return an error if no data was passed
         if not _list: 
-            log('No devices to add', proc= proc,
-                v= logging.A)
+            log('No devices to add', proc=proc,
+                v=logging.A)
             return False
         
         def _execute(_list, cur):
@@ -509,8 +509,8 @@ class main_db(sql_database):
                 
                 # Get the IP's from the device 
                 ip_list = _device.get_ips()
-                log('{} has {} ip(s)'.format(_device.device_name, len(ip_list)), 
-                    proc= proc, v= logging.I)
+                log('{} has {} ip(s)'.format(_device.device_name, len(ip_list)),
+                    proc=proc, v=logging.I)
                 
                 # For failed devices which couldn't be fully polled:
                 with sql_logger(proc):    
@@ -552,15 +552,15 @@ class main_db(sql_database):
         else: return _execute(_list, cur)
         
         
-        log('Added {} devices to visited table'.format(len(_list)), 
-            proc= proc, v= logging.I)
+        log('Added {} devices to visited table'.format(len(_list)),
+            proc=proc, v=logging.I)
         return True
     
     
 class device_db(sql_database):
     
     def __init__(self, **kwargs):
-        proc= 'device_db.__init__'
+        proc = 'device_db.__init__'
         
         self.DB_NAME = 'inventory'
         sql_database.__init__(self, self.DB_NAME, **kwargs)
@@ -576,7 +576,7 @@ class device_db(sql_database):
     
     def unique_name_exists(self, name):
         '''Returns True if a given unique_name already exists'''
-        proc= 'io_sql.unique_name_exists'
+        proc = 'io_sql.unique_name_exists'
         
         with self.conn, self.conn.cursor() as cur:
             cur.execute('''
@@ -585,11 +585,11 @@ class device_db(sql_database):
                 where unique_name = %s
                 limit 1);
                 ''',
-                (name.upper(), ) )
-            return cur.fetchone()[0] # Returns a (False,) tuple)
+                (name.upper(),))
+            return cur.fetchone()[0]  # Returns a (False,) tuple)
     
     
-    def add_device_nd(self, _device= None, _list= None):
+    def add_device_nd(self, _device=None, _list=None):
         """Appends a device or a list of devices to the database
         
         Optional Args:
@@ -599,16 +599,16 @@ class device_db(sql_database):
         Returns:
             Boolean: True if write was successful, False otherwise.
         """ 
-        proc= 'device_db.add_device_nd'
+        proc = 'device_db.add_device_nd'
         
         # Return an error if no data was passed    
         if not (_list or _device): 
-            log('No devices to add', proc= proc, v= logging.A)
+            log('No devices to add', proc=proc, v=logging.A)
             return False
         
-        if not _list: _list= []
+        if not _list: _list = []
         
-        log('Adding device(s) to devices table'.format(self.DB_NAME), proc= proc, v= logging.N)
+        log('Adding device(s) to devices table'.format(self.DB_NAME), proc=proc, v=logging.N)
         
         # If a single device was passed, add it for group processing
         if _device: _list.append(_device)
@@ -618,7 +618,7 @@ class device_db(sql_database):
             
             # Process each device
             for _device in _list:
-                device_id= self.insert_device_entry(_device, cur)
+                device_id = self.insert_device_entry(_device, cur)
                 
                 # Add all the device's serials
                 for serial in _device.serial_numbers:
@@ -626,20 +626,20 @@ class device_db(sql_database):
                 
                 # Add all of the device's interfaces            
                 for interf in _device.interfaces:
-                    interface_id= self.insert_interface_entry(device_id, interf, cur)
+                    interface_id = self.insert_interface_entry(device_id, interf, cur)
                     
                     # Add all the interface's mac addresses
                     for mac_address in interf.mac_address_table:
-                        mac_id= self.insert_mac_entry(device_id, interface_id, mac_address, cur)
+                        mac_id = self.insert_mac_entry(device_id, interface_id, mac_address, cur)
                     
                     # Add each neighbor + ip that was matched to an interface
                     for neighbor in interf.neighbors:
-                        neighbor_id= self.insert_neighbor_entry(device_id, interface_id, neighbor, cur)
+                        neighbor_id = self.insert_neighbor_entry(device_id, interface_id, neighbor, cur)
                         for n_ip in neighbor: self.insert_neighbor_ip_entry(neighbor_id, n_ip, cur)
                     
                 # Add each neighbor + ip not matched to an interface
                 for neighbor in _device.neighbors:
-                    neighbor_id= self.insert_neighbor_entry(device_id, None, neighbor, cur)
+                    neighbor_id = self.insert_neighbor_entry(device_id, None, neighbor, cur)
                     for n_ip in neighbor: self.insert_neighbor_ip_entry(neighbor_id, n_ip, cur)
                     
         self.conn.commit()
@@ -648,8 +648,8 @@ class device_db(sql_database):
     
     def insert_device_entry(self, _device, cur):
         # Trim the password
-        _password= _device.credentials.get('password', None)
-        if _password: _password= _password[:2]
+        _password = _device.credentials.get('password', None)
+        if _password: _password = _password[:2]
        
         # Add the device into the database
         cur.execute('''
@@ -868,8 +868,8 @@ class device_db(sql_database):
         
     
     
-    def create_table(self, drop_tables= True):
-        proc= 'device_db.create_table'
+    def create_table(self, drop_tables=True):
+        proc = 'device_db.create_table'
         
         with self.conn, self.conn.cursor() as cur:
                 if drop_tables: cur.execute('''

@@ -11,11 +11,11 @@ from wylog import log, logging
 
 import gvars
 
-def start_cli_session(handler= None,
-                      netmiko_platform= None,
-                      ip= None, 
-                      cred= None, 
-                      port= None):
+def start_cli_session(handler=None,
+                      netmiko_platform=None,
+                      ip=None,
+                      cred=None,
+                      port=None):
     """
     Starts a CLI session with a remote device. Will attempt to use
     SSH first, and if it fails it will try a terminal session.
@@ -40,21 +40,21 @@ def start_cli_session(handler= None,
         IOError: If connection could not be established
         AssertionError: If error checking failed
     """
-    proc= 'cli.start_cli_session'
+    proc = 'cli.start_cli_session'
     
-    log('Connecting to %s device %s' % (netmiko_platform, ip), ip= ip, proc= proc, v= logging.I)
+    log('Connecting to %s device %s' % (netmiko_platform, ip), ip=ip, proc=proc, v=logging.I)
     
-    assert isinstance(ip, str), proc+ ': Ip [{}] is not a string.'.format(type(ip)) 
+    assert isinstance(ip, str), proc + ': Ip [{}] is not a string.'.format(type(ip)) 
     
-    result= {
+    result = {
             'TCP_22': port_is_open(22, ip),
             'TCP_23': port_is_open(23, ip),
-            'connection': None, 
+            'connection': None,
             'cred': None,
             }
     
     # Get credentials if none were acquired yet
-    if len(gvars.CRED_LIST) == 0: gvars.CRED_LIST= getCreds()
+    if len(gvars.CRED_LIST) == 0: gvars.CRED_LIST = getCreds()
     
     # Error checking        
     assert len(gvars.CRED_LIST) > 0, 'No credentials available'
@@ -62,12 +62,12 @@ def start_cli_session(handler= None,
     if cred: assert isinstance(cred, dict), 'Cred is type [{}]. Should be dict.'.format(type(cred))
 
     # Switch between global creds or argument creds
-    if cred: _credList= cred
-    else: _credList= gvars.CRED_LIST
+    if cred: _credList = cred
+    else: _credList = gvars.CRED_LIST
     
     # Check to see if SSH (port 22) is open
     if not result['TCP_22']:
-        log('Port 22 is closed on %s' % ip, ip=ip, proc= proc, v= logging.I)
+        log('Port 22 is closed on %s' % ip, ip=ip, proc=proc, v=logging.I)
     elif port is None or port is 22: 
         # Try wylog in with each credential we have
         for cred in _credList:
@@ -75,22 +75,22 @@ def start_cli_session(handler= None,
                 # Establish a connection to the device
                 result['connection'] = handler(
                     device_type=netmiko_platform,
-                    ip=  ip,
-                    username= cred['user'],
-                    password= cred['password'],
-                    secret= cred['password'],
+                    ip=ip,
+                    username=cred['user'],
+                    password=cred['password'],
+                    secret=cred['password'],
                 )
                 
-                result['cred']= cred
-                log('Successful ssh auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]),ip=ip, proc= proc, v= logging.N)
+                result['cred'] = cred
+                log('Successful ssh auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), ip=ip, proc=proc, v=logging.N)
                 
                 return result
     
             except NetMikoAuthenticationException:
-                log ('SSH auth error to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), ip=ip, proc= proc, v= logging.A)
+                log ('SSH auth error to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), ip=ip, proc=proc, v=logging.A)
                 continue
             except NetMikoTimeoutException:
-                log('SSH to %s timed out.' % ip, ip=ip, proc= proc, v= logging.A)
+                log('SSH to %s timed out.' % ip, ip=ip, proc=proc, v=logging.A)
                 # If the device is unavailable, don't try any other credentials
                 break
             except Exception as e:
@@ -99,35 +99,35 @@ def start_cli_session(handler= None,
     
     # Check to see if port 23 (telnet) is open
     if not result['TCP_23']:
-        log('Port 23 is closed on %s' % ip, ip= ip, proc= proc, v= logging.I)
+        log('Port 23 is closed on %s' % ip, ip=ip, proc=proc, v=logging.I)
     elif port is None or port is 23:
         for cred in _credList:
             try:
                 # Establish a connection to the device
                 result['connection'] = handler(
                     device_type=netmiko_platform + '_telnet',
-                    ip=  ip,
-                    username= cred['user'],
-                    password= cred['password'],
-                    secret= cred['password'],
+                    ip=ip,
+                    username=cred['user'],
+                    password=cred['password'],
+                    secret=cred['password'],
                 )
                 
-                result['cred']= cred
-                log('Successful ssh auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]),ip=ip, proc= proc, v= logging.N)
+                result['cred'] = cred
+                log('Successful ssh auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), ip=ip, proc=proc, v=logging.N)
                 
                 return result
             
             except NetMikoAuthenticationException:
                 log('Telnet auth error to %s using %s, %s' % 
-                    (ip, cred['user'], cred['password'][:2]), ip=ip, v= logging.A, proc= proc)
+                    (ip, cred['user'], cred['password'][:2]), ip=ip, v=logging.A, proc=proc)
                 continue
             except NetMikoTimeoutException:
-                log('Telnet to %s timed out.' % ip, ip=ip, proc= proc, v= logging.A)
+                log('Telnet to %s timed out.' % ip, ip=ip, proc=proc, v=logging.A)
                 # If the device is unavailable, don't try any other credentials
                 break
             except Exception as e:
                 log('Telnet to [{}] failed due to [{}] error: [{}]'.format(ip, type(e).__name__, str(e)),
-                    ip=ip, proc= proc, v= logging.A)
+                    ip=ip, proc=proc, v=logging.A)
                 break
     
-    raise IOError(proc+ ': CLI connection to [{}] failed'.format(ip))
+    raise IOError(proc + ': CLI connection to [{}] failed'.format(ip))
