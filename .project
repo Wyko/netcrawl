@@ -3,8 +3,6 @@
 	<name>netcrawl</name>
 	<comment></comment>
 	<projects>
-		<project>netmiko</project>
-		<project>wylog</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
