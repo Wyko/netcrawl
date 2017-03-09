@@ -56,17 +56,17 @@ These instructions will get you a copy of the project up and running on your loc
 
 ### Prerequisites
 
-Download [Netmiko](https://github.com/ktbyers/netmiko)
-
-```pip3 install Netmiko```
+Download a version of [Netmiko](https://github.com/ktbyers/netmiko) that has the autodetect functionality. This is currently in development, thus the git commit install below.
+`pip install git+git://github.com/ktbyers/netmiko.git@1bdde6bee64d596209be9e0ed0b189d8b58a0711`
 
 Download and install [Nmap](https://nmap.org)
-
-```pip install nmap```
+`pip install nmap`
 
 Download and install [keyring](https://pypi.python.org/pypi/keyring). On Linux, additional packages are required ([see documentation here](https://github.com/mitya57/secretstorage))
+`pip install keyring`
 
-``` pip install keyring```
+Download [python-nmap](http://xael.org/pages/python-nmap-en.html)
+`pip install python-nmap`
 
 ## Overview
 
