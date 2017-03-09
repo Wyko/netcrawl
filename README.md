@@ -68,7 +68,7 @@ These instructions will get you a copy of the project up and running on your loc
 ### Required
 * *[keyring](https://pypi.python.org/pypi/keyring)*
 * *[Netmiko](https://github.com/ktbyers/netmiko)* - Any version that has the autodetect functionality.
-* *psycopg2*
+* *psycopg2* - PostgreSQL package
 
 `pip install keyring psycopg2 git+git://github.com/ktbyers/netmiko.git@1bdde6bee64d596209be9e0ed0b189d8b58a0711`
 
