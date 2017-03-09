@@ -57,19 +57,19 @@ These instructions will get you a copy of the project up and running on your loc
 ### Prerequisites
 
 ### Required
-* [keyring](https://pypi.python.org/pypi/keyring)
-* [Netmiko](https://github.com/ktbyers/netmiko) - Any version that has the autodetect functionality.
+* *[keyring](https://pypi.python.org/pypi/keyring)*
+* *[Netmiko](https://github.com/ktbyers/netmiko)* - Any version that has the autodetect functionality.
 
 `pip install keyring git+git://github.com/ktbyers/netmiko.git@1bdde6bee64d596209be9e0ed0b189d8b58a0711`
 
 On *Linux*, additional packages are required for `keyring`. [See documentation here](https://github.com/mitya57/secretstorage)
 
 ### Optional
+* *[Nmap](https://nmap.org)* - Manually download and install
 * *[python-nmap](http://xael.org/pages/python-nmap-en.html)* - for scanning function
 
 `pip install python-nmap`
 
-* Manually download and install [Nmap](https://nmap.org)
 
 ## Overview
 
