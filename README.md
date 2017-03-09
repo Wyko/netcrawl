@@ -58,12 +58,15 @@ These instructions will get you a copy of the project up and running on your loc
 
 Download [Netmiko](https://github.com/ktbyers/netmiko)
 
-```
-pip3 install Netmiko
-```
+```pip3 install Netmiko```
 
 Download and install [Nmap](https://nmap.org)
 
+```pip install nmap```
+
+Download and install [keyring](https://pypi.python.org/pypi/keyring). On Linux, additional packages are required ([see documentation here](https://github.com/mitya57/secretstorage))
+
+``` pip install keyring```
 
 ## Overview
 
