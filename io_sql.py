@@ -16,7 +16,7 @@ retry_args= {'stop_max_delay': 60000, # Stop after 60 seconds
 
 
             
-class log_sql_execution():
+class sql_logger():
     '''Utility class to enable logging of SQL execute statements, 
     as well as handling specific errors'''
     
@@ -56,11 +56,9 @@ class log_sql_execution():
 
 class sql_database():
     def __init__(self, dbname, **kwargs):
-        with psycopg2.connect(dbname='postgres', user='wyko', password='pass', host='localhost') as self.conn:
-            # Create the tables in each database, overwriting if needed
-            clean= kwargs.get('clean', False)
-            self.create_database(dbname)
-        self.conn.close()
+        # Create the tables in each database, overwriting if needed
+        clean= kwargs.get('clean', False)
+        self.create_database(dbname)
         
         self.conn = psycopg2.connect(dbname= dbname, user='wyko', password='pass', host='localhost')
         
@@ -99,7 +97,7 @@ class sql_database():
                                   user='wyko', 
                                   password='pass', 
                                   host='localhost') as conn:
-                with conn.cursor() as cur, log_sql_execution(proc):
+                with conn.cursor() as cur, sql_logger(proc):
                     return _execute(db_name, cur)
     """            
             
@@ -110,14 +108,14 @@ class sql_database():
         proc= 'sql_database.create_database'
         
         with psycopg2.connect(dbname='postgres', user='wyko', password='pass', host='localhost') as conn:
-            with conn.cursor() as cur, log_sql_execution(proc):
+            with conn.cursor() as cur, sql_logger(proc):
                 cur.execute("SELECT 1 from pg_database WHERE datname= %s", (new_db, ))
                 exists= bool(cur.fetchone()) 
             
         if not exists:
             with psycopg2.connect(dbname='postgres', user='wyko', password='pass', host='localhost') as conn:
                 conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-                with conn.cursor() as cur, log_sql_execution(proc):
+                with conn.cursor() as cur, sql_logger(proc):
                     cur.execute('CREATE DATABASE {};'.format(new_db))
                     return True
     
@@ -187,7 +185,7 @@ class main_db(sql_database):
         
         self.ignore_visited = kwargs.get('ignore_visited', True)
         
-        with self.conn, self.conn.cursor() as cur, log_sql_execution(proc):
+        with self.conn, self.conn.cursor() as cur, sql_logger(proc):
 
             # Delete everything in the visited table
             if self.ignore_visited: cur.execute('DELETE FROM visited')
@@ -253,9 +251,9 @@ class main_db(sql_database):
                 ''')
             output = cur.fetchone()
         
+
+            # Mark the new entry as being worked on 
             if output:
-                
-                # Mark the new entry as being worked on 
                 cur.execute('''
                     UPDATE pending 
                     SET working= TRUE
@@ -312,7 +310,7 @@ class main_db(sql_database):
                         v= logging.I, proc= proc)
                     continue
                 
-                with log_sql_execution(proc):
+                with sql_logger(proc):
                     cur.execute('''
                         INSERT INTO pending  
                             (
@@ -450,7 +448,7 @@ class main_db(sql_database):
             raise ValueError(proc+ ': No IP or platform was supplied in [{}]'.format(_device_d))
         
         def _execute(_device_d, cur):        
-            with log_sql_execution(proc):    
+            with sql_logger(proc):    
                 cur.execute('''
                     INSERT INTO visited  
                         (
@@ -515,7 +513,7 @@ class main_db(sql_database):
                     proc= proc, v= logging.I)
                 
                 # For failed devices which couldn't be fully polled:
-                with log_sql_execution(proc):    
+                with sql_logger(proc):    
                     cur.execute('''
                         INSERT INTO visited  
                             (
@@ -530,7 +528,7 @@ class main_db(sql_database):
                         )
                     
                 for ip in ip_list:
-                    with log_sql_execution(proc):
+                    with sql_logger(proc):
                         cur.execute('''
                         INSERT INTO visited  
                             (
@@ -577,7 +575,9 @@ class device_db(sql_database):
     
     
     def unique_name_exists(self, name):
-        # Do everything in one transaction
+        '''Returns True if a given unique_name already exists'''
+        proc= 'io_sql.unique_name_exists'
+        
         with self.conn, self.conn.cursor() as cur:
             cur.execute('''
                 select exists 

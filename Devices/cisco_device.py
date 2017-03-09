@@ -12,8 +12,8 @@ import re, gvars, util
 
 class cisco_device(network_device):
         
-    def parse_hostname(self, attempts=5):
-        proc= 'cisco_device.parse_hostname'
+    def _parse_hostname(self, attempts=5):
+        proc= 'cisco_device._parse_hostname'
         log('Parsing hostname', proc= proc, v= logging.I)
         
         output = re.search('^hostname (.+)\n', self.config, re.MULTILINE)
@@ -49,16 +49,16 @@ class cisco_device(network_device):
         
         # Last case scenario, return nothing
         log('Failed. No hostname found.', proc= proc, v= logging.C)
-        raise ValueError('parse_hostname failed. No hostname found.')
+        raise ValueError('_parse_hostname failed. No hostname found.')
 
     
-    def get_serials(self):
-        proc= 'cisco_device.get_serials'
+    def _get_serials(self):
+        proc= 'cisco_device._get_serials'
         
         log('Starting to get serials', proc= proc, v= logging.I)
         
         # Poll the device for the serials
-        raw_output= self.attempt('show inventory', 
+        raw_output= self._attempt('show inventory', 
                      proc= proc, 
                      fn_check= lambda x: bool(re.search(r'''
                                         ^Name.*?["](.+?)["][\s\S]*?
@@ -115,7 +115,7 @@ class cisco_device(network_device):
     
     
     
-    def get_mac_address_table(self, attempts= 3):
+    def _get_mac_address_table(self, attempts= 3):
         '''Populates self.mac_address_table from the remote device.
         
         Returns:
@@ -124,17 +124,17 @@ class cisco_device(network_device):
         Raises:
             Exception: ValueError if no result was found.
         '''
-        proc= 'cisco_device.get_mac_address_table'
+        proc= 'cisco_device._get_mac_address_table'
 
         log('Getting MAC address table', proc= proc, v= logging.I)
         
         # Try the two command formats
-        try: self.raw_mac_address_table = self.attempt('show mac address-table', 
+        try: self.raw_mac_address_table = self._attempt('show mac address-table', 
                          proc= proc, 
                          fn_check= util.contains_mac_address,
                          alert= False)
         except: 
-            try: self.raw_mac_address_table = self.attempt('show mac-address-table', 
+            try: self.raw_mac_address_table = self._attempt('show mac-address-table', 
                          proc= proc, 
                          fn_check= util.contains_mac_address,
                          alert= False)
@@ -191,12 +191,12 @@ class cisco_device(network_device):
         return True
 
 
-    def get_config(self, attempts=5):
-        proc= 'cisco_device.get_config'
+    def _get_config(self, attempts=5):
+        proc= 'cisco_device._get_config'
         
         log('Beginning config download from %s' % self.connection.ip, proc= proc, v= logging.I)
 
-        self.config= self.attempt('show run', 
+        self.config= self._attempt('show run', 
                              proc= proc, 
                              fn_check= lambda x: bool(len(x) > 250),
                              check_msg= 'Config seems too short.',
@@ -206,21 +206,21 @@ class cisco_device(network_device):
         log('Config download successful.', ip= self.connection.ip, proc= proc, v= logging.N)
     
     
-    def get_other_ips(self):
-        proc= 'cisco_device.get_other_ips'
+    def _get_other_ips(self):
+        proc= 'cisco_device._get_other_ips'
         output = re.findall(r'(?:glbp|hsrp|standby).*?(\d{1,3}(?:\.\d{1,3}){3})', self.config, re.I)
         log('{} non-standard (virtual) ips found on the device'.format(len(output)), proc= proc, v= logging.D)
         self.other_ips.extend(output)
         
     
-    def get_cdp_neighbors(self, attempts= 3):
-        proc= 'cisco_device.get_cdp_neighbors'
+    def _get_cdp_neighbors(self, attempts= 3):
+        proc= 'cisco_device._get_cdp_neighbors'
 
         log('Getting CDP neighbors', proc= proc, v= logging.I)
         
         for i in range(attempts):
             # Get the CDP neighbors for the device 
-            raw_cdp= self.attempt('show cdp neighbor detail', 
+            raw_cdp= self._attempt('show cdp neighbor detail', 
                          proc= proc, 
                          attempts= attempts,
                          fn_check= lambda x: bool(x))

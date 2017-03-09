@@ -13,7 +13,7 @@ import re
 
 class ios_device(cisco_device):
    
-    def get_interfaces(self):
+    def _get_interfaces(self):
         proc= 'ios_device.parse_ios_interfaces'
         log('Starting ios interface parsing.', proc= proc, v= logging.I)
         

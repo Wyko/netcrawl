@@ -13,85 +13,85 @@ import re
 class nxos_device(cisco_device):
     
     
-    def get_serials(self):
+    def _get_serials(self):
         '''Returns serials based on XML output'''
-        proc= 'nxos_device.get_serials'
+        proc = 'nxos_device._get_serials'
         
-        log('Starting to get serials', proc= proc, v= logging.I)
+        log('Starting to get serials', proc=proc, v=logging.I)
         
-        output= self.attempt('show inv | xml | sec <ROW_inv>', 
-             proc= proc, 
-             fn_check= lambda x: bool(re.search(r'ROW_inv', x, re.I)))
+        output = self._attempt('show inv | xml | sec <ROW_inv>',
+             proc=proc,
+             fn_check=lambda x: bool(re.search(r'ROW_inv', x, re.I)))
         
         # Split the output into a list of dicts
-        self.serial_numbers= [{x: y for (x, y) in re.findall(r'<(.+?)>(.*?)<\/\1>', entry, re.I)} 
-                    for entry in re.split(r'<RoW_inv>', output, flags=(re.I|re.M)) if entry.strip()]
+        self.serial_numbers = [{x: y for (x, y) in re.findall(r'<(.+?)>(.*?)<\/\1>', entry, re.I)} 
+                    for entry in re.split(r'<RoW_inv>', output, flags=(re.I | re.M)) if entry.strip()]
         
-        log('Serials found: {}.'.format(len(self.serial_numbers)), proc= proc, v= logging.N)
+        log('Serials found: {}.'.format(len(self.serial_numbers)), proc=proc, v=logging.N)
 
     
-    def get_interfaces(self):
-        proc= 'nxos_device.get_interfaces'
+    def _get_interfaces(self):
+        proc = 'nxos_device._get_interfaces'
         
         try: self.get_interfaces_xml()
         except: 
             log('XML parsing failed. Attempting config parsing.',
-                proc= proc, v= logging.I)
+                proc=proc, v=logging.I)
             self.get_interfaces_config()
         
         
     def get_interfaces_xml(self):
-        proc='nxos_device.get_interfaces_xml'
+        proc = 'nxos_device.get_interfaces_xml'
         
-        log('Getting XML interface data', proc= proc, v= logging.I)
+        log('Getting XML interface data', proc=proc, v=logging.I)
         
         # Poll the device for interfaces
-        output= self.attempt('show interface | xml | sec ROW_interface', 
-                 proc= proc, fn_check= lambda x: '<ROW_interface>' in x)
+        output = self._attempt('show interface | xml | sec ROW_interface',
+                 proc=proc, fn_check=lambda x: '<ROW_interface>' in x)
         
         # Split the results into individual interfaces
-        output= [x for x in output.strip().split('<ROW_interface>') if not x.strip() == '']
+        output = [x for x in output.strip().split('<ROW_interface>') if not x.strip() == '']
         
         # Parse each interface into variables
-        re_comp= re.compile(r'<(.+?)>(.*?)<\/\1>')
+        re_comp = re.compile(r'<(.+?)>(.*?)<\/\1>')
         interfaces = []
         for interf in output:
             
             # Parse the interface data
-            entries= dict(re_comp.findall(interf))
-            i= interface()
+            entries = dict(re_comp.findall(interf))
+            i = interface()
             
-            i.raw_interface= interf
+            i.raw_interface = interf
             
             # Set the interface variables based on the results
-            i.interface_name= entries.pop('interface', None)
+            i.interface_name = entries.pop('interface', None)
             if not i.interface_name: continue
             
-            x= self.split_interface_name(i.interface_name)
+            x = self.split_interface_name(i.interface_name)
             if x: 
-                i.interface_type= x[0]
-                i.interface_number= x[1]
+                i.interface_type = x[0]
+                i.interface_number = x[1]
             
-            i.interface_ip= next((v for k,v in entries.items() 
-                                if k=='svi_ip_addr' or k=='eth_ip_addr'), None) 
+            i.interface_ip = next((v for k, v in entries.items() 
+                                if k == 'svi_ip_addr' or k == 'eth_ip_addr'), None) 
             
-            i.interface_description= next((v for k,v in entries.items() 
-                                if k=='svi_desc' or k=='desc'), None)
+            i.interface_description = next((v for k, v in entries.items() 
+                                if k == 'svi_desc' or k == 'desc'), None)
             
-            i.interface_subnet= entries.pop('svi_ip_mask', None)
+            i.interface_subnet = entries.pop('svi_ip_mask', None)
             
-            i.parent_interface_name= entries.pop('eth_bundle', None)
+            i.parent_interface_name = entries.pop('eth_bundle', None)
             
             interfaces.append(i)
         
         
         if len(interfaces) > 0:
             log('Interfaces found: {}.'.format(
-                len(interfaces)), proc= proc, v= logging.N)  
+                len(interfaces)), proc=proc, v=logging.N)  
             
         else:
-            log('No interfaces found', proc= proc, v= logging.C)
-            raise ValueError(proc+ ': No interfaces found.')     
+            log('No interfaces found', proc=proc, v=logging.C)
+            raise ValueError(proc + ': No interfaces found.')     
             
         self.merge_interfaces(interfaces)
         
@@ -99,9 +99,9 @@ class nxos_device(cisco_device):
     
     
     def get_interfaces_config(self):
-        proc= 'nxos_device.get_interfaces_config'
+        proc = 'nxos_device.get_interfaces_config'
         
-        log('Getting config interface data', proc= proc, v= logging.I)
+        log('Getting config interface data', proc=proc, v=logging.I)
         
         # If no device config was passed, return it now
         if self.config == '': return
@@ -116,7 +116,7 @@ class nxos_device(cisco_device):
             i = interface()
             i.raw_interface = interf
             
-            try: output= re.search(r'''
+            try: output = re.search(r'''
                 ^\s*?            # Beginning of a line, with whitespace
                 interf.*?        # The word interface, followed by some characters
                 \b               # A word boundry
@@ -127,7 +127,7 @@ class nxos_device(cisco_device):
             ''', interf, re.I | re.X | re.M) 
             except: continue
             else:
-                if output and output.re.groups==3: 
+                if output and output.re.groups == 3: 
                     i.interface_name = output.group(1)
                     i.interface_type = output.group(2)
                     i.interface_number = output.group(3)
@@ -147,12 +147,12 @@ class nxos_device(cisco_device):
     
         if len(interfaces) > 0:
             log('Interfaces found: {}'.format(
-                len(interfaces)), proc= proc, v= logging.N)  
+                len(interfaces)), proc=proc, v=logging.N)  
             
         else:
             log('No interfaces found. Raw_interfaces was: {}'.format(
-                raw_interfaces), proc= proc, v= logging.C)
-            raise ValueError(proc+ ': No interfaces found.')                
+                raw_interfaces), proc=proc, v=logging.C)
+            raise ValueError(proc + ': No interfaces found.')                
         
         # Merge the interfaces into the device interfaces
         self.merge_interfaces(interfaces)  

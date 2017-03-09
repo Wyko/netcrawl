@@ -23,7 +23,9 @@ class interface():
         self.tunnel_status= kwargs.pop('tunnel_status', None)
         self.raw_interface= kwargs.pop('raw_interface', None)
         self.interface_ip= kwargs.pop('interface_ip', None)
+        self.interface_id= kwargs.pop('interface_id', None)
         self.virtual_ip= kwargs.pop('virtual_ip', None)
+        self.device_id= kwargs.pop('device_id', None)
         
         # Mutable Arguments
         self.mac_address_table= []
@@ -87,63 +89,6 @@ class network_device():
             ])
     
     
-    def attempt(self, 
-                command, 
-                proc, 
-                fn_check, 
-                v= logging.C, 
-                attempts= 3, 
-                alert= True,
-                check_msg= None
-                ):
-        '''Attempts to send a command to a remote device.
-        
-        Args:
-            command (String): The command to send
-            proc (String): The calling process (for wylog purposes)
-            fn_check (Lambda): A boolean function to evaluate the output
-            
-        Optional Args:
-            v (Integer): log alert level for a failed run
-            attempts (Integer): Number of times to try the command
-            alert (Boolean): LIf True, log failed attempts
-        
-        '''
-        for i in range(attempts):
-            try:
-                output = self.connection.send_command_expect(command)
-            except Exception as e:
-                if i < (attempts-1):
-                    log('Attempt: {} - Failed Command: {} - Error: {}'.format(str(i+1),
-                        command, str(e)), proc= proc, v= logging.I)
-                    # Sleep for an increasing amount of time
-                    sleep(i*i + 1)
-                    continue
-                else:
-                    if alert: self.alert('Attempt Final: {} - Failed Command: {} - Error: {}'.format(str(i+1),
-                        command, str(e)), proc= proc)
-                    raise ValueError('Attempt Final: {} - Failed Command: {} - Error: {}'.format(str(i+1),
-                        command, str(e)))
-            else:
-                # Evaluate the returned output using the passed lamda function
-                if fn_check(output): 
-                    log('Attempt: {} - Successful Command: {}'.format(str(i+1), command), proc= proc, v= logging.I)
-                    return output
-                
-                elif i < (attempts-1):
-                    log('Attempt: {} - Check Failed on Command: {}'.format(
-                        str(i+1), command), proc= proc, v= logging.I)
-                    
-                    # Sleep for an increasing amount of time
-                    sleep(i*i + 1)
-                    continue
-                else:
-                    if alert: self.alert('Attempt Final: {} - Check Failed on Command: {}'.format(str(i+1),
-                        command), proc= proc)
-                    raise ValueError('Attempt Final: {} - Check Failed on Command: {}'.format(str(i+1),
-                        command))
-                
-    
     
     def alert(self, msg, proc, failed= False, v= logging.A, ip= None):
         '''Populates the failed messages variable for the device'''
@@ -152,28 +97,6 @@ class network_device():
         self.error_log += '{} - IP [{}]: {} | '.format(proc, ip, msg)
         
         log(msg= msg, proc= proc, v= v, ip= ip)
-    
-    
-    def get_serials(self):
-        self.alert('No inherited method replaced this method.', 'base_device.get_serials')
-        
-    def get_config(self):
-        self.alert('No inherited method replaced this method.', 'base_device.get_config')
-                
-    def parse_hostname(self):
-        self.alert('No inherited method replaced this method.', 'base_device.parse_hostname')
-                
-    def get_cdp_neighbors(self):
-        self.alert('No inherited method replaced this method.', 'base_device.get_cdp_neighbors')
-            
-    def get_interfaces(self):
-        self.alert('No inherited method replaced this method.', 'base_device.get_interfaces')
-            
-    def get_other_ips(self):
-        self.alert('No inherited method replaced this method.', 'base_device.get_other_ips')
-        
-    def get_mac_address_table(self):
-        self.alert('No inherited method replaced this method.', 'base_device.get_mac_address_table')       
     
     
     def add_ip(self, ip):
@@ -241,22 +164,13 @@ class network_device():
         entries.append(entry)
         
         # Populate the table
-        for n in self.neighbors:
+        for n in self.all_neighbors():
             entry = '-- '
             if sh_name: entry += '{name:30.29}, '.format(name = n['device_name'])
             if sh_ip: entry += '{ip:15}, '.format(ip = n['ip'])
             if sh_src: entry += '{src:25}, '.format(src = n['source_interface'])
             if sh_platform: entry += '{platform}'.format(platform = n['system_platform'])
             entries.append(entry)
-        
-        for i in self.interfaces:
-            for n in i.neighbors:
-                entry = '-- '
-                if sh_name: entry += '{name:30.29}, '.format(name = n['device_name'])
-                if sh_ip: entry += '{ip:15}, '.format(ip = n['ip'])
-                if sh_src: entry += '*{src:25}, '.format(src = n['source_interface'])
-                if sh_platform: entry += '{platform}'.format(platform = n['system_platform'])
-                entries.append(entry)
         
         entries.append('\n* Un-Matched source interface')
         output += '\n'.join(entries)
@@ -329,50 +243,9 @@ class network_device():
         
     
     def first_serial(self):
-        if len(self.serial_numbers) == 0: return ''
+        if len(self.serial_numbers) == 0: return None
         else: return self.serial_numbers[0]['serialnum']
-    
-    
-    def _normalize_netmasks(self):
-        for i in self.interfaces:
-            try: netmask= util.cidr_to_netmask(i.interface_subnet)
-            except ValueError: pass
-            else: i.interface_subnet= netmask
-    
-    
-    def _normalize_mac_address(self, mac):
-        return ''.join([x.upper() for x in mac if re.match(r'\w', x)])
-            
-    
-    def enable(self, attempts= 3):
-        '''Enter enable mode.
-        
-        Returns:
-            Boolean: True if enable mode successful.
-        '''
-        proc= 'base_device.enable'
-        
-        for i in range(attempts):
-            
-            # Attempt to enter enable mode
-            try: self.connection.enable()
-            except Exception as e: 
-                log('Enable failed on attempt %s.' % (str(i+1)), 
-                    ip= self.connection.ip, proc= proc, v= logging.A, error= e)
-                
-                # At the final try, return the failed device.
-                if i >= attempts-1: 
-                    raise ValueError('Enable failed after {} attempts'.format(i))
-                
-                # Otherwise rest for one second longer each time and then try again
-                sleep(i+2)
-                continue
-            else: 
-                log('Enable successful on attempt %s' % (str(i+1)), 
-                    ip= self.connection.ip, proc= proc, v= logging.D)
-                
-                return True
-    
+          
     
     def process_device(self):
         '''Main method which fully populates the network_device'''
@@ -402,10 +275,10 @@ class network_device():
         # Functions that must work consecutively in order to proceed
         # On error, these raise an exception and fail the processing
         for fn in (
-            self.enable(),
-            self.get_config(),
-            self.parse_hostname(),
-            self.get_interfaces(),
+            self._enable(),
+            self._get_config(),
+            self._parse_hostname(),
+            self._get_interfaces(),
             ):
             try:
                 fn
@@ -417,10 +290,10 @@ class network_device():
         # These are optional, and only leave a log message when they 
         # fail (unless SUPPRESS_EXCEPTION has been set False)
         for fn in (
-            self.get_serials(),
-            self.get_other_ips(),
-            self.get_cdp_neighbors(),
-            self.get_mac_address_table(),
+            self._get_serials(),
+            self._get_other_ips(),
+            self._get_cdp_neighbors(),
+            self._get_mac_address_table(),
             self._normalize_netmasks()       # Must be after all IP polling
             ):
             try: 
@@ -437,5 +310,125 @@ class network_device():
     
     
     
+    def _get_serials(self):
+        self.alert('No inherited method replaced this method.', 'base_device._get_serials')
         
+    def _get_config(self):
+        self.alert('No inherited method replaced this method.', 'base_device._get_config')
+                
+    def _parse_hostname(self):
+        self.alert('No inherited method replaced this method.', 'base_device._parse_hostname')
+                
+    def _get_cdp_neighbors(self):
+        self.alert('No inherited method replaced this method.', 'base_device._get_cdp_neighbors')
             
+    def _get_interfaces(self):
+        self.alert('No inherited method replaced this method.', 'base_device._get_interfaces')
+            
+    def _get_other_ips(self):
+        self.alert('No inherited method replaced this method.', 'base_device._get_other_ips')
+        
+    def _get_mac_address_table(self):
+        self.alert('No inherited method replaced this method.', 'base_device._get_mac_address_table')     
+        
+    
+    def _normalize_netmasks(self):
+        for i in self.interfaces:
+            try: netmask= util.cidr_to_netmask(i.interface_subnet)
+            except ValueError: pass
+            else: i.interface_subnet= netmask
+    
+    
+    def _normalize_mac_address(self, mac):
+        return ''.join([x.upper() for x in mac if re.match(r'\w', x)])
+    
+      
+    
+    def _enable(self, attempts= 3):
+        '''Enter enable mode.
+        
+        Returns:
+            Boolean: True if enable mode successful.
+        '''
+        proc= 'base_device._enable'
+        
+        for i in range(attempts):
+            
+            # Attempt to enter enable mode
+            try: self.connection._enable()
+            except Exception as e: 
+                log('Enable failed on attempt %s.' % (str(i+1)), 
+                    ip= self.connection.ip, proc= proc, v= logging.A, error= e)
+                
+                # At the final try, return the failed device.
+                if i >= attempts-1: 
+                    raise ValueError('Enable failed after {} attempts'.format(i))
+                
+                # Otherwise rest for one second longer each time and then try again
+                sleep(i+2)
+                continue
+            else: 
+                log('Enable successful on attempt %s' % (str(i+1)), 
+                    ip= self.connection.ip, proc= proc, v= logging.D)
+                
+                return True
+    
+    
+    
+    def _attempt(self, 
+                command, 
+                proc, 
+                fn_check, 
+                v= logging.C, 
+                attempts= 3, 
+                alert= True,
+                check_msg= None
+                ):
+        '''Attempts to send a command to a remote device.
+        
+        Args:
+            command (String): The command to send
+            proc (String): The calling process (for wylog purposes)
+            fn_check (Lambda): A boolean function to evaluate the output
+            
+        Optional Args:
+            v (Integer): log alert level for a failed run
+            attempts (Integer): Number of times to try the command
+            alert (Boolean): LIf True, log failed attempts
+        
+        '''
+        for i in range(attempts):
+            try:
+                output = self.connection.send_command_expect(command)
+            except Exception as e:
+                if i < (attempts-1):
+                    log('Attempt: {} - Failed Command: {} - Error: {}'.format(str(i+1),
+                        command, str(e)), proc= proc, v= logging.I)
+                    # Sleep for an increasing amount of time
+                    sleep(i*i + 1)
+                    continue
+                else:
+                    if alert: self.alert('Attempt Final: {} - Failed Command: {} - Error: {}'.format(str(i+1),
+                        command, str(e)), proc= proc)
+                    raise ValueError('Attempt Final: {} - Failed Command: {} - Error: {}'.format(str(i+1),
+                        command, str(e)))
+            else:
+                # Evaluate the returned output using the passed lamda function
+                if fn_check(output): 
+                    log('Attempt: {} - Successful Command: {}'.format(str(i+1), command), proc= proc, v= logging.I)
+                    return output
+                
+                elif i < (attempts-1):
+                    log('Attempt: {} - Check Failed on Command: {}'.format(
+                        str(i+1), command), proc= proc, v= logging.I)
+                    
+                    # Sleep for an increasing amount of time
+                    sleep(i*i + 1)
+                    continue
+                else:
+                    if alert: self.alert('Attempt Final: {} - Check Failed on Command: {}'.format(str(i+1),
+                        command), proc= proc)
+                    raise ValueError('Attempt Final: {} - Check Failed on Command: {}'.format(str(i+1),
+                        command))
+
+    
