@@ -7,10 +7,13 @@ This package is still in development.
 ## Usage
 
 ```
-NetCrawl [-h] [-v LEVEL] [-r] [-c] [-sd] [-sR | -sS | -sN] [-t TARGET] [-p PLATFORM]
+usage: NetCrawl [-h] [-v LEVEL] [-i] [-u] [-d] [-c] [-sd] [-sR | -sS | -sN]
+                [-t TARGET] [-p PLATFORM]
 
-This package will process a specified host and pull information from it. 
-If desired, it can then crawl the device's neighbors recursively and continue the process.
+Netcrawl is a network discovery tool designed to poll one or
+more devices, inventory them in a SQL database, and then
+continue the process through the device's neighbors. It offers
+integration with Nmap to discover un-connected hosts.
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -24,10 +27,16 @@ Options:
                             4: Normal level
                             5: Informational level
                             6: Debug level info (All info)
-  -r, --resume          Resume the last scan, if one was interrupted midway. Omitting
-                            this argument is not the same as using -c; Previous database
-                            entries are maintained. Scan starts with the seed device. All
-                            neighbor entries marked pending are reset.
+  -i, --ignore          Do not resume the last scan if one was interrupted midway. Omitting
+                            this argument is not the same as using -c; Previous device database
+                            entries are maintained, but all visited entries are removed.
+  -u, --update          Iterates through all previously-found devices and scans them again.
+                            This implies the --ignore flag in that it also removes previous
+                            visited entries.
+  -d, --debug           Enables debug messages. If this is not specified, a Verbosity level
+                            of 5 or greater has no effect since those messages will be
+                            ignored anyway. If Debug is enabled and V is less than 5,
+                            debug messages will only be printed to the log file.
   -c, --clean           Delete all existing database entries and rebuild the databases.
   -sd, --skip-named-duplicates
                         If a CDP entry has the same host name as a previously visited device, ignore it.
@@ -46,7 +55,7 @@ Scan Type:
 
 Target Specification:
   -t TARGET, --target TARGET
-                        Hostname or IP address of the starting device
+                        Hostname or IP address of a starting device
   -p PLATFORM           The Netmiko platform for the device
 ```
 
@@ -59,8 +68,9 @@ These instructions will get you a copy of the project up and running on your loc
 ### Required
 * *[keyring](https://pypi.python.org/pypi/keyring)*
 * *[Netmiko](https://github.com/ktbyers/netmiko)* - Any version that has the autodetect functionality.
+* *psycopg2*
 
-`pip install keyring git+git://github.com/ktbyers/netmiko.git@1bdde6bee64d596209be9e0ed0b189d8b58a0711`
+`pip install keyring psycopg2 git+git://github.com/ktbyers/netmiko.git@1bdde6bee64d596209be9e0ed0b189d8b58a0711`
 
 On *Linux*, additional packages are required for `keyring`. [See documentation here](https://github.com/mitya57/secretstorage)
 
