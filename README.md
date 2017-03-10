@@ -120,7 +120,7 @@ Recursively inventory all devices from a seed device, skipping any neighbors who
 `netcrawl -sR --skip-named-duplicates -t 10.1.1.1`
 
 Discover a network segment using Nmap:
-
+`netcrawl -sN -t 10.0-10.0-254.1`
 
 
 ## Built With
