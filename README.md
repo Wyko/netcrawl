@@ -1,19 +1,26 @@
 # netcrawl
 
-This package is designed to facilitate crawling a network for information on connected devices.
+Netcrawl is a network discovery tool designed to poll one or more devices, inventory them, and then continue the process through the device's neighbors.
 
 This package is still in development.
+
+## Features
+
+* Automatically backs up device configurations
+* Stores MAC addresses by interface, allowing for switchport tracing of devices
+* Stores a neighbor database to find layer two connection mappings
+* Multiple ways to auto-detect system type of newly discovered devices
+* Works with Nmap to allow for discovery of both neighboring and seperated devices
+* Securely stores credentials using [keyring](https://pypi.python.org/pypi/keyring) and [cryptography](https://cryptography.io)
+* Stores device inventory using a PostgreSQL database
+* Offers a single device scan to quickly get data on one device
+
 
 ## Usage
 
 ```
-usage: NetCrawl [-h] [-v LEVEL] [-i] [-u] [-d] [-c] [-sd] [-sR | -sS | -sN]
-                [-t TARGET] [-p PLATFORM]
-
-Netcrawl is a network discovery tool designed to poll one or
-more devices, inventory them in a SQL database, and then
-continue the process through the device's neighbors. It offers
-integration with Nmap to discover un-connected hosts.
+usage: NetCrawl [-h] [-v LEVEL] [-m] [-i] [-u] [-d] [-c] [-sd] [-sR] [-sS]
+                [-sN] [-t TARGET] [-p PLATFORM]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -42,6 +49,7 @@ Options:
                         If a CDP entry has the same host name as a previously visited device, ignore it.
 
 Scan Type:
+  -m                    Credential management. Use as only argument.
   -sR, --recursive      Recursively scan neighbors for info. --target is not required,
                             but if it is supplied then the device will be added as a
                             scan target. Target will accept a single IP or hostname.
@@ -67,11 +75,12 @@ These instructions will get you a copy of the project up and running on your loc
 
 ### Required
 * *[Netmiko](https://github.com/ktbyers/netmiko)* - Any version that has the autodetect functionality.
+* *[wylog](https://github.com/Wyko/wylog)*
 * *psycopg2* - PostgreSQL package
-* *[keyring](https://pypi.python.org/pypi/keyring)*
-** [Running `keyring` on linux](https://pypi.python.org/pypi/keyring#using-keyring-on-ubuntu-16-04)
+* *[keyring](https://pypi.python.org/pypi/keyring)* - [Running `keyring` on linux](https://pypi.python.org/pypi/keyring#using-keyring-on-ubuntu-16-04)
+* *[cryptography](https://cryptography.io)*
 
-`pip install keyring psycopg2 git+git://github.com/ktbyers/netmiko.git@1bdde6bee64d596209be9e0ed0b189d8b58a0711`
+`pip install wylog keyring psycopg2 cryptography git+git://github.com/ktbyers/netmiko.git@1bdde6bee64d596209be9e0ed0b189d8b58a0711`
 
 ### Optional
 * *[Nmap](https://nmap.org)* - Manually download and install

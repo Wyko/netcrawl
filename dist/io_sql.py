@@ -4,7 +4,6 @@ from psycopg2.extras import RealDictCursor
 from psycopg2 import errorcodes
 
 import psycopg2, wylog, time, traceback
-from importlib._bootstrap import _exec
 
 retry_args = {'stop_max_delay': 60000,  # Stop after 60 seconds
              'wait_exponential_multiplier': 100,  # Exponential backoff
