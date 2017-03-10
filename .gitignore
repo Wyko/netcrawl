@@ -3,3 +3,6 @@ country.xml
 *database*
 *runtime*
 /Output Examples/
+/.settings/
+/.project
+/.pydevproject
