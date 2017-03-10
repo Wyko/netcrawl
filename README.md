@@ -74,11 +74,7 @@ Target Specification:
 
 These instructions will get you a copy of the project up and running on your local machine.
 
-### Prerequisites
-
-#### Required
-
-##### Pip Install
+### Pip Install
 * *[Netmiko](https://github.com/ktbyers/netmiko)* - Any version that has the autodetect functionality.
 * *[wylog](https://github.com/Wyko/wylog)*
 * *psycopg2* - PostgreSQL package
@@ -88,12 +84,11 @@ These instructions will get you a copy of the project up and running on your loc
 
 `pip install wylog keyring psycopg2 cryptography git+git://github.com/ktbyers/netmiko.git@1bdde6bee64d596209be9e0ed0b189d8b58a0711`
 
-##### Manual Install
+### Manual Install
 * *[PostgreSQL](https://www.postgresql.org/)*
 
-#### Optional
 
-##### Nmap
+### Optional - Nmap
 Without installing this, you will not be able to use the -sN function.
 
 * *[Nmap](https://nmap.org)* - Manually download and install
