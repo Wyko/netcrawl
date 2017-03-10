@@ -14,17 +14,17 @@ import re
 class ios_device(cisco_device):
    
     def _get_interfaces(self):
-        proc= 'ios_device.parse_ios_interfaces'
-        log('Starting ios interface parsing.', proc= proc, v= logging.I)
+        proc = 'ios_device.parse_ios_interfaces'
+        log('Starting ios interface parsing.', proc=proc, v=logging.I)
         
         interfaces = []
         # If no device config was passed, return
         if not self.config: 
-            log('Error: No data in self.config.', proc= proc, v= logging.A)
-            raise ValueError(proc+ ': No data in self.config.')
+            log('Error: No data in self.config.', proc=proc, v=logging.A)
+            raise ValueError(proc + ': No data in self.config.')
         
         # Split out the interfaces from the raw config
-        raw_interfaces = re.findall(r'\n(^interface[\s\S]+?)\n!', self.config, (re.M|re.I))
+        raw_interfaces = re.findall(r'\n(^interface[\s\S]+?)\n!', self.config, (re.M | re.I))
         
         # For each interface parsed from the raw config, create a new interface 
         # object and parse it into structured data
@@ -34,7 +34,7 @@ class ios_device(cisco_device):
             # Add the raw config data to the interface
             i.raw_interface = interf
             
-            try: output= re.search(r'''
+            try: output = re.search(r'''
                 ^\s*?            # Beginning of a line, with whitespace
                 interf.*?        # The word interface, followed by some characters
                 \b               # A word boundry
@@ -45,14 +45,14 @@ class ios_device(cisco_device):
             ''', interf, re.I | re.X | re.M) 
             except: continue
             else:
-                if output and output.re.groups==3: 
+                if output and output.re.groups == 3: 
                     i.interface_name = output.group(1)
                     i.interface_type = output.group(2)
                     i.interface_number = output.group(3)
                 else: continue
             
             # Parse description
-            try: i.interface_description = re.search(r'description[ ]+(.+)$', interf, re.I|re.M).group(1)
+            try: i.interface_description = re.search(r'description[ ]+(.+)$', interf, re.I | re.M).group(1)
             except: pass
             
             try:
@@ -62,17 +62,17 @@ class ios_device(cisco_device):
                 if ip_info and ip_info.group(2): i.interface_subnet = ip_info.group(2)    
             except Exception as e:
                 log('Exception while parsing IP and Subnet: {}'.format(str(e)),
-                    proc = proc, v= logging.C)
+                    proc=proc, v=logging.C)
                 pass
             
             interfaces.append(i)
     
         if len(interfaces) > 0:
             log('Interfaces found: {}'.format(
-                len(interfaces)), proc= proc, v= logging.N)  
+                len(interfaces)), proc=proc, v=logging.N)  
         else:
             log('Error: No interfaces found. Raw_interfaces was: {}'.format(
-                raw_interfaces), proc= proc, v= logging.C)  
-            raise ValueError(proc+ ': No interfaces found.')               
+                raw_interfaces), proc=proc, v=logging.C)  
+            raise ValueError(proc + ': No interfaces found.')               
         
         self.merge_interfaces(interfaces)  

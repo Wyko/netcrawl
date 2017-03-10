@@ -1,2 +1,0 @@
-import keyring as kr
-

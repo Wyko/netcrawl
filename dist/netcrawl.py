@@ -1,13 +1,12 @@
-from gvars import MAIN_DB_PATH, RUN_PATH, DEVICE_DB_PATH
 from device_dispatcher import create_instantiated_device
 from time import sleep
 
 from wylog import logging, log
 
-import sys, argparse, textwrap, os, io_sql, gvars 
+import sys, argparse, textwrap, os, io_sql
+import config, cred_menu
 import queue, multiprocessing, traceback, nmap, json
 from wylog.logging import logf
-
 
 @logf
 def normal_run(**kwargs):
@@ -20,6 +19,10 @@ def normal_run(**kwargs):
 
     # Add the seed device if a target was specified  
     if ('target' in kwargs) and (kwargs['target'] is not None):
+        
+        # Remove the seed device from visited devices
+        main_db.remove_visited_record(kwargs['target'])
+        
         main_db.add_pending_device_d(
             ip_list=[kwargs['target']],
             netmiko_platform=kwargs.get('netmiko_platform', 'unknown'))
@@ -32,11 +35,7 @@ def normal_run(**kwargs):
     results = multiprocessing.Queue()
     
     # Create workers and start them
-    workers = [worker(tasks,
-                     results,
-                     v=logging.VERBOSITY,
-                     raise_exceptions=gvars.RAISE_ERRORS)
-              for i in range(num_workers) ]
+    workers = [worker(tasks, results) for i in range(num_workers)]
     for w in workers: w.start()
     
     while True: 
@@ -137,19 +136,22 @@ class worker(multiprocessing.Process):
     def __init__(self,
                  task_queue,
                  result_queue,
-                 v=4,  # Verbosity
-                 raise_exceptions=False
                  ):
         
         multiprocessing.Process.__init__(self)
         self.result_queue = result_queue
         self.task_queue = task_queue
-        self.v = v
-        self.raise_exceptions = raise_exceptions
+        self.cc = config.cc
     
     def run(self):
         proc = '{}.run'.format(self.name)
-        logging.VERBOSITY = self.v
+        
+        # Reset global variables since subprocesses may not
+        # inherit parent runstates
+        config.cc= self.cc
+        logging.VERBOSITY = config.cc['verbosity']
+        logging.PRINT_DEBUG= config.cc['debug']
+        
         while True:
             
             log('{}: Awaiting task. Queue size: [{}]'.format(
@@ -193,7 +195,7 @@ class worker(multiprocessing.Process):
                 self.task_queue.task_done()
                 self.result_queue.put(result)
                 
-                if self.raise_exceptions: raise
+                if config.raise_exceptions(): raise
                 else: 
                     traceback.print_exc()
                     continue
@@ -215,7 +217,7 @@ class worker(multiprocessing.Process):
                 self.result_queue.put(result) 
                     
                 # Ignore CLI errors, raise the rest
-                if (self.raise_exceptions and 
+                if (config.raise_exceptions() and 
                     ('CLI connection' not in str(e))): 
                     raise
                 else: 
@@ -282,24 +284,22 @@ def scan_range(_target, **kwargs):
         
     log('Finished scanning hosts', proc=proc, v=logging.H)
 
-def single_run(ip, netmiko_platform, **kwargs):
+
+def single_run(target, netmiko_platform= 'unknown'):
     proc = 'main.single_run'
     
-    log('Processing connection to {}'.format(ip), proc=proc, v=logging.H)
+    log('Processing connection to {}'.format(target), proc=proc, v=logging.H)
     
-    device = create_instantiated_device(ip=ip, netmiko_platform=netmiko_platform)
+    device = create_instantiated_device(ip=target, netmiko_platform=netmiko_platform)
     
     # Process the device
     try: device.process_device()
     except Exception as e:
         device.alert(msg='Connection to {} failed: {}'.format(device.ip, str(e)), proc=proc)
-        if gvars.RAISE_ERRORS: raise
+        print('Device processing failed')
+        if config.raise_exceptions(): raise
+        return False
         
-    # Save the device
-    dlist = io_sql.device_db(DEVICE_DB_PATH, **kwargs)
-    dlist.add_device_nd(device)
-    dlist.db.close()
-    
     # Output the device info to console
     print('\n' + str(device) + '\n')
     print(device.neighbor_table())
@@ -319,7 +319,7 @@ def parse_cli():
     
     polling = parser.add_argument_group('Options')
     scanning = parser.add_argument_group('Scan Type')
-    scantype = scanning.add_mutually_exclusive_group()
+    action = scanning.add_mutually_exclusive_group(required=True)
     target = parser.add_argument_group('Target Specification')
     
     polling.add_argument(
@@ -341,6 +341,17 @@ def parse_cli():
                 6: Debug level info (All info)''')
         )
     
+    
+    action.add_argument(
+        '-m',
+        action="store_true",
+        dest='manage_creds',
+        help=textwrap.dedent(
+        '''\
+        Credential management. Use as only argument.
+        '''),
+        )
+    
 
     polling.add_argument(
         '-i',
@@ -353,7 +364,6 @@ def parse_cli():
             this argument is not the same as using -c; Previous device database
             entries are maintained, but all visited entries are removed. 
         '''),
-        default=False
         )
     
     polling.add_argument(
@@ -367,7 +377,6 @@ def parse_cli():
             This implies the --ignore flag in that it also removes previous 
             visited entries.
         '''),
-        default=False
         )
     
     polling.add_argument(
@@ -382,7 +391,6 @@ def parse_cli():
             ignored anyway. If Debug is enabled and V is less than 5, 
             debug messages will only be printed to the log file.
         '''),
-        default=False
         )
     
     polling.add_argument(
@@ -391,7 +399,6 @@ def parse_cli():
         action="store_true",
         dest='clean',
         help='Delete all existing database entries and rebuild the databases.',
-        default=False
         )
     
     polling.add_argument(
@@ -404,7 +411,7 @@ def parse_cli():
         default=False
         )
     
-    scantype.add_argument(
+    action.add_argument(
         '-sR',
         '--recursive',
         action="store_true",
@@ -415,23 +422,21 @@ def parse_cli():
             but if it is supplied then the device will be added as a 
             scan target. Target will accept a single IP or hostname.
         '''),
-        default=True
         )
     
-    scantype.add_argument(
+    action.add_argument(
         '-sS',
         '--single',
         action="store_true",
-        dest='recursive',
+        dest='single',
         help=textwrap.dedent(
         '''\
         Scan one seed device for info. --target is required.
             Target will accept a single IP or hostname.
         '''),
-        default=False
         )
     
-    scantype.add_argument(
+    action.add_argument(
         '-sN',
         '--scan-network',
         action="store_true",
@@ -471,11 +476,6 @@ def parse_cli():
      
     return args
 
-
-
-
-
-
     
 if __name__ == "__main__":
     proc = 'main.__main__'
@@ -483,47 +483,59 @@ if __name__ == "__main__":
     # Parse CLI arguments
     if len(sys.argv[1:]) > 0: 
         args = parse_cli()
-          
-        # Set verbosity level for wylog
-        logging.VERBOSITY = args.v
-        logging.PRINT_DEBUG = args.debug
-          
-        # Create the directory to host the logs and other files
-        if not os.path.exists(RUN_PATH):
-            os.makedirs(RUN_PATH)
-          
-        if args.network_scan:
-            if args.host: 
-                log('##### Starting Scan #####', proc=proc, v=logging.H)
-                scan_range(args.host,
-                           clean=args.clean)
-                log('##### Scan Complete #####', proc=proc, v=logging.H)
-            else:
-                print('--target (-t) is required when performing a network scan (-ns)')
-           
-        elif args.recursive: 
-            log('##### Starting Recursive Run #####', proc=proc, v=logging.H)
-            
-            normal_run(
-                target=args.host,
-                netmiko_platform=args.platform,
-                ignore_visited=args.ignore_visited,
-                clean=args.clean,
-                )
-            log('##### Recursive Run Complete #####', proc=proc, v=logging.H)
-           
-        else: 
-            log('##### Starting Single Run #####', proc=proc, v=logging.H)
-            single_run(
-                ip=args.host,
-                netmiko_platform=args.platform,
-                ignore_visited=args.ignore_visited,
-                clean=args.clean,
-                )
-            log('##### Single Run Complete #####', proc=proc, v=logging.H)
-        
     else:
         print('No arguments passed.')
+        sys.exit()
+    
+    # Process the settings file
+    config.parse_config()
+    
+    # Set verbosity level for wylog
+    logging.VERBOSITY = args.v
+    config.cc['verbosity']= args.v
+    
+    logging.PRINT_DEBUG = args.debug
+    if args.debug: config.cc['debug']= True 
+    
+
+    if args.manage_creds:
+        cred_menu.start()
+    
+    if len(config.cc['credentials']) == 0:
+        print('There are no stored credentials. You must first add them with -m')
+        log('There are no stored credentials. You must first add them with -m',
+            v= logging.C, proc= proc)
+        sys.exit()
+    
+      
+    if args.network_scan:
+        if args.host: 
+            log('##### Starting Scan #####', proc=proc, v=logging.H)
+            scan_range(args.host,
+                       clean=args.clean)
+            log('##### Scan Complete #####', proc=proc, v=logging.H)
+        else:
+            print('--target (-t) is required when performing a network scan (-ns)')
+       
+    elif args.recursive: 
+        log('##### Starting Recursive Run #####', proc=proc, v=logging.H)
+        
+        normal_run(
+            target=args.host,
+            netmiko_platform=args.platform,
+            ignore_visited=args.ignore_visited,
+            clean=args.clean,
+            )
+        log('##### Recursive Run Complete #####', proc=proc, v=logging.H)
+       
+    elif args.single: 
+        log('##### Starting Single Run #####', proc=proc, v=logging.H)
+        single_run(
+            target= args.host,
+            netmiko_platform=args.platform,
+            )
+        log('##### Single Run Complete #####', proc=proc, v=logging.H)
+        
        
        
      

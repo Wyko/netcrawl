@@ -8,7 +8,7 @@ from Devices.nxos_device import nxos_device
 from Devices.ios_device import ios_device
 from wylog import log, logging
 
-import gvars, cli, util
+import cli, util
 
 # The keys of this dictionary are the supported device_types
 CLASS_MAPPER_BASE = {
@@ -89,7 +89,7 @@ def autodetect(target):
         # Connect using the SSH autodetect system
         try: connection = cli.start_cli_session(ip=target,
                                                handler=SSHDetect,
-                                               netmiko_platform='terminal_server'
+                                               netmiko_platform='autodetect'
                                                )['connection']
         except IOError as e:
             log('Autodetect connection failed.', proc=proc, v=logging.A)

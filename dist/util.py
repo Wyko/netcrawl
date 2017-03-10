@@ -24,7 +24,7 @@ def getCreds():
     import getpass
     username = input("Username: ")
     password = getpass.getpass("Password: ")
-    return [{'user': username, 'password': password, 'type': 'User Entered'}]  
+    return [{'username': username, 'password': password, 'type': 'User Entered'}]  
 
 
 def contains_mac_address(mac):
@@ -36,8 +36,8 @@ def contains_mac_address(mac):
             [\:\-\.]       # Seperated by :, -, or .
         ){2,7}             # match it between 2 and 7 times
             [0-9A-F]{2,4}  # Followed by one last set of Hex
-        ''', 
-        mac, re.I|re.X))
+        ''',
+        mac, re.I | re.X))
 
 
 def parse_ip(raw_input):
@@ -77,9 +77,9 @@ def cidr_to_netmask(cidr):
     
     # Strip any non digit characters
     if isinstance(cidr, str): 
-        cidr= int(re.sub(r'\D', '', str(cidr)))
+        cidr = int(re.sub(r'\D', '', str(cidr)))
     
-    try: cidr= int(cidr)
+    try: cidr = int(cidr)
     except Exception as e: 
         raise ValueError('Input CIDR [{}] not a valid netmask. '
                          'Error [{}]'.format(cidr, str(e)))
@@ -97,20 +97,20 @@ def timeit(method):
         ts = time.time()
         result = method(*args, **kw)
         te = time.time()
-        print('Function', method.__name__, 'time:', round((te -ts)*1000,1), 'ms')
+        print('Function', method.__name__, 'time:', round((te - ts) * 1000, 1), 'ms')
         print()
         return result
     return timed
 
         
 class benchmark(object):
-    def __init__(self,name):
+    def __init__(self, name):
         self.name = name
     def __enter__(self):
         self.start = time.time()
-    def __exit__(self,ty,val,tb):
+    def __exit__(self, ty, val, tb):
         end = time.time()
-        print("%s : %0.5f seconds" % (self.name, end-self.start))
+        print("%s : %0.5f seconds" % (self.name, end - self.start))
         return False    
 
 

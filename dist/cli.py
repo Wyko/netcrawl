@@ -9,7 +9,7 @@ from netmiko import NetMikoTimeoutException
 from util import port_is_open, getCreds
 from wylog import log, logging
 
-import gvars
+import config
 
 def start_cli_session(handler=None,
                       netmiko_platform=None,
@@ -53,17 +53,17 @@ def start_cli_session(handler=None,
             'cred': None,
             }
     
-    # Get credentials if none were acquired yet
-    if len(gvars.CRED_LIST) == 0: gvars.CRED_LIST = getCreds()
-    
     # Error checking        
-    assert len(gvars.CRED_LIST) > 0, 'No credentials available'
+    if cred: # User supplied credentials
+        assert isinstance(cred, dict), 'Cred is type [{}]. Should be dict.'.format(type(cred))
+    else:
+        assert len(config.creds()) > 0, 'No credentials available'
     if port: assert port is 22 or port is 23, 'Invalid port number [{}]. Should be 22 or 23.'.format(str(port))
-    if cred: assert isinstance(cred, dict), 'Cred is type [{}]. Should be dict.'.format(type(cred))
+
 
     # Switch between global creds or argument creds
     if cred: _credList = cred
-    else: _credList = gvars.CRED_LIST
+    else: _credList = config.creds()
     
     # Check to see if SSH (port 22) is open
     if not result['TCP_22']:
@@ -76,18 +76,18 @@ def start_cli_session(handler=None,
                 result['connection'] = handler(
                     device_type=netmiko_platform,
                     ip=ip,
-                    username=cred['user'],
+                    username=cred['username'],
                     password=cred['password'],
                     secret=cred['password'],
                 )
                 
                 result['cred'] = cred
-                log('Successful ssh auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), ip=ip, proc=proc, v=logging.N)
+                log('Successful ssh auth to %s using %s, %s' % (ip, cred['username'], cred['password'][:2]), ip=ip, proc=proc, v=logging.N)
                 
                 return result
     
             except NetMikoAuthenticationException:
-                log ('SSH auth error to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), ip=ip, proc=proc, v=logging.A)
+                log ('SSH auth error to %s using %s, %s' % (ip, cred['username'], cred['password'][:2]), ip=ip, proc=proc, v=logging.A)
                 continue
             except NetMikoTimeoutException:
                 log('SSH to %s timed out.' % ip, ip=ip, proc=proc, v=logging.A)
@@ -107,19 +107,19 @@ def start_cli_session(handler=None,
                 result['connection'] = handler(
                     device_type=netmiko_platform + '_telnet',
                     ip=ip,
-                    username=cred['user'],
+                    username=cred['username'],
                     password=cred['password'],
                     secret=cred['password'],
                 )
                 
                 result['cred'] = cred
-                log('Successful ssh auth to %s using %s, %s' % (ip, cred['user'], cred['password'][:2]), ip=ip, proc=proc, v=logging.N)
+                log('Successful ssh auth to %s using %s, %s' % (ip, cred['username'], cred['password'][:2]), ip=ip, proc=proc, v=logging.N)
                 
                 return result
             
             except NetMikoAuthenticationException:
                 log('Telnet auth error to %s using %s, %s' % 
-                    (ip, cred['user'], cred['password'][:2]), ip=ip, v=logging.A, proc=proc)
+                    (ip, cred['username'], cred['password'][:2]), ip=ip, v=logging.A, proc=proc)
                 continue
             except NetMikoTimeoutException:
                 log('Telnet to %s timed out.' % ip, ip=ip, proc=proc, v=logging.A)

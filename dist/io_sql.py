@@ -229,6 +229,23 @@ class main_db(sql_database):
                 WHERE
                     pending_id = %s
                 ''', (_id,))
+            
+    def remove_visited_record(self, ip):
+        '''Removes a record from the pending table''' 
+        proc = 'main_db.remove_processed'
+        
+        # Error checking
+        assert isinstance(ip, str), (
+            proc + ': ip [{}] is not str'.format(type(ip)))
+        
+        # Delete the processed entry
+        with self.conn, self.conn.cursor() as cur:
+            cur.execute('''
+                DELETE FROM 
+                    visited
+                WHERE
+                    ip = %s
+                ''', (ip,))
         
 
     def get_next(self):
@@ -304,9 +321,12 @@ class main_db(sql_database):
         
         with self.conn, self.conn.cursor() as cur:
             for ip in _device_d['ip_list']:
-                if (sql_database.ip_exists(self, ip, 'visited') or
-                    sql_database.ip_exists(self, ip, 'pending')):
-                    log('[{}] already in visited or/and pending database'.format(ip),
+                if sql_database.ip_exists(self, ip, 'visited'):
+                    log('[{}] already in visited table'.format(ip),
+                        v=logging.I, proc=proc)
+                
+                if sql_database.ip_exists(self, ip, 'pending'):
+                    log('[{}] already in pending table'.format(ip),
                         v=logging.I, proc=proc)
                     continue
                 
@@ -702,7 +722,7 @@ class device_db(sql_database):
                 'processing_error': _device.processing_error,
                 'TCP_22': _device.TCP_22,
                 'TCP_23': _device.TCP_23,
-                'username': _device.credentials.get('user', None),
+                'username': _device.credentials.get('username', None),
                 'password': _password,
                 'cred_type': _device.credentials.get('type', None),
             })

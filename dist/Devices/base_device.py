@@ -1,11 +1,11 @@
-from datetime import datetime
-from gvars import DEVICE_PATH, TIME_FORMAT_FILE
-from time import sleep
 from netmiko import ConnectHandler
 from wylog import log, logging
-
-import re, hashlib, util, os, gvars, cli
+from datetime import datetime
+from time import sleep
 from util import is_ip
+
+import re, hashlib, util, os, cli
+import config
 
 
 class interface():
@@ -76,15 +76,18 @@ class network_device():
         
         
     def __str__(self):
+        try: serial= ', '.join([x + ': ' + y  for x, y in self.first_serial().items()])
+        except: serial= 'None'
+        
         return '\n'.join([
             'Device Name:       ' + str(self.device_name),
             'Unique Name:       ' + str(self.unique_name()),
             'Management IP:     ' + str(self.ip),
-            'First Serial:      ' + ', '.join([x + ': ' + y  for x, y in self.serial_numbers[0].items()]),
+            'First Serial:      ' + serial,
             'Serial Count:      ' + str(len(self.serial_numbers)),
             'Dynamic MAC Count: ' + str(len(self.mac_address_table)),
             'Interface Count:   ' + str(len(self.interfaces)),
-            'Neighbor Count:    ' + str(len(self.neighbors)),
+            'Neighbor Count:    ' + str(len(self.all_neighbors())),
             'Config Size:       ' + str(len(self.config))
             ])
     
@@ -113,15 +116,15 @@ class network_device():
         proc = 'base_device.save_config'
         log('Saving config.', proc=proc, v=logging.I)
         
-        path = DEVICE_PATH + self.unique_name() + '/' 
-        filename = datetime.now().strftime(TIME_FORMAT_FILE) + '.cfg'
+        path = config.device_path() + self.unique_name() + '/' 
+        filename = datetime.now().strftime(config.file_time()) + '.cfg'
         
         if not os.path.exists(path):
             os.makedirs(path)
         
         with open(path + filename, 'a') as outfile:       
             outfile.write('\n'.join([
-                datetime.now().strftime(TIME_FORMAT_FILE),
+                datetime.now().strftime(config.file_time()),
                 self.config,
                 '\n']))
                 
@@ -158,18 +161,18 @@ class network_device():
         # Add the table header
         entry = ''
         if sh_name: entry += '     {name:^30}  '.format(name='Neighbor Name')
-        if sh_ip: entry += '{ip:^15} '.format(ip='IP')
         if sh_src: entry += '{src:^25} '.format(src='Source Interface')
-        if sh_platform: entry += '  Platform'
+        if sh_platform: entry += '{platform:^10} '.format(platform='Platform')
+        if sh_ip: entry += '{ip:^15} '.format(ip='IP')
         entries.append(entry)
         
         # Populate the table
         for n in self.all_neighbors():
             entry = '-- '
             if sh_name: entry += '{name:30.29}, '.format(name=n['device_name'])
-            if sh_ip: entry += '{ip:15}, '.format(ip=n['ip'])
             if sh_src: entry += '{src:25}, '.format(src=n['source_interface'])
             if sh_platform: entry += '{platform}'.format(platform=n['system_platform'])
+            if sh_ip: entry += '{ip:15}, '.format(ip=str(n['ip_list']))
             entries.append(entry)
         
         entries.append('\n* Un-Matched source interface')
@@ -199,8 +202,8 @@ class network_device():
                         proc=proc,
                         v=logging.D)
                     # For each variable in the interface class, compare and overwrite new ones.
-                    for key in gvars(new_interf).keys():
-                        gvars(old_interf)[key] = gvars(new_interf)[key] 
+                    for key in config(new_interf).keys():
+                        config(old_interf)[key] = config(new_interf)[key] 
             
             if not match: self.interfaces.append(new_interf)
     
@@ -300,7 +303,7 @@ class network_device():
                 fn
             except Exception as e:
                 self.alert(fn.__name__ + ' - Error: ' + str(e), proc=proc)
-                if gvars.RAISE_ERRORS: raise
+                if config.raise_exceptions(): raise
                
         
         log('Finished polling {}'.format(self.unique_name()), proc=proc, v=logging.H)
@@ -355,14 +358,14 @@ class network_device():
         for i in range(attempts):
             
             # Attempt to enter enable mode
-            try: self.connection._enable()
+            try: self.connection.enable()
             except Exception as e: 
                 log('Enable failed on attempt %s.' % (str(i + 1)),
                     ip=self.connection.ip, proc=proc, v=logging.A, error=e)
                 
                 # At the final try, return the failed device.
                 if i >= attempts - 1: 
-                    raise ValueError('Enable failed after {} attempts'.format(i))
+                    raise ValueError('Enable failed after {} attempts'.format(str(i+1)))
                 
                 # Otherwise rest for one second longer each time and then try again
                 sleep(i + 2)

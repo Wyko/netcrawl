@@ -8,7 +8,8 @@ from Devices.base_device import network_device, interface
 from wylog import log, logging
 from util import parse_ip
 from time import sleep
-import re, gvars, util
+import re, util
+import config
 
 class cisco_device(network_device):
         
@@ -33,7 +34,7 @@ class cisco_device(network_device):
             try:
                 output = self.connection.find_prompt()
             except ValueError:
-                self.connection.global_delay_factor += gvars.DELAY_INCREASE
+                self.connection.global_delay_factor += config.DELAY_INCREASE
                 log('Failed to find the prompt during attempt %s. Increasing delay to %s'  
                     % (str(i + 1), self.connection.global_delay_factor),
                     proc=proc, v=logging.A)
