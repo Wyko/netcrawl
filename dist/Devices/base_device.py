@@ -116,7 +116,7 @@ class network_device():
         proc = 'base_device.save_config'
         log('Saving config.', proc=proc, v=logging.I)
         
-        path = config.device_path() + self.unique_name() + '/' 
+        path = os.path.join(config.device_path(), self.unique_name()) 
         filename = datetime.now().strftime(config.file_time()) + '.cfg'
         
         if not os.path.exists(path):
