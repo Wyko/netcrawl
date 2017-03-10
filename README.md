@@ -84,7 +84,7 @@ These instructions will get you a copy of the project up and running on your loc
 * *psycopg2* - PostgreSQL package
 * *[cryptography](https://cryptography.io)*
 * *[keyring](https://pypi.python.org/pypi/keyring)*
-..* [Running `keyring` on linux](https://pypi.python.org/pypi/keyring#using-keyring-on-ubuntu-16-04)
+  * [Running `keyring` on linux](https://pypi.python.org/pypi/keyring#using-keyring-on-ubuntu-16-04)
 
 `pip install wylog keyring psycopg2 cryptography git+git://github.com/ktbyers/netmiko.git@1bdde6bee64d596209be9e0ed0b189d8b58a0711`
 
