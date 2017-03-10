@@ -12,8 +12,11 @@ This package is still in development.
 * Multiple ways to auto-detect system type of newly discovered devices
 * Works with Nmap to allow for discovery of both neighboring and seperated devices
 * Securely stores credentials using [keyring](https://pypi.python.org/pypi/keyring) and [cryptography](https://cryptography.io)
+* Can use multiple credentials in case the first fails 
 * Stores device inventory using a PostgreSQL database
 * Offers a single device scan to quickly get data on one device
+* Concurrently runs multiple subprocesses to quickly scan devices
+* Multiple `netcrawl` top-level processes can run concurrently to scan different network segments (do not use `-c` while doing this), or to run an Nmap scan and inventory hosts as they are discovered.
 
 
 ## Usage
@@ -73,38 +76,51 @@ These instructions will get you a copy of the project up and running on your loc
 
 ### Prerequisites
 
-### Required
+#### Required
+
+##### Pip Install
 * *[Netmiko](https://github.com/ktbyers/netmiko)* - Any version that has the autodetect functionality.
 * *[wylog](https://github.com/Wyko/wylog)*
 * *psycopg2* - PostgreSQL package
-* *[keyring](https://pypi.python.org/pypi/keyring)* - [Running `keyring` on linux](https://pypi.python.org/pypi/keyring#using-keyring-on-ubuntu-16-04)
 * *[cryptography](https://cryptography.io)*
+* *[keyring](https://pypi.python.org/pypi/keyring)*
+..* [Running `keyring` on linux](https://pypi.python.org/pypi/keyring#using-keyring-on-ubuntu-16-04)
 
 `pip install wylog keyring psycopg2 cryptography git+git://github.com/ktbyers/netmiko.git@1bdde6bee64d596209be9e0ed0b189d8b58a0711`
 
-### Optional
+##### Manual Install
+* *[PostgreSQL](https://www.postgresql.org/)*
+
+#### Optional
+
+##### Nmap
+Without installing this, you will not be able to use the -sN function.
+
 * *[Nmap](https://nmap.org)* - Manually download and install
 * *[python-nmap](http://xael.org/pages/python-nmap-en.html)* - for scanning function
 
 `pip install python-nmap`
 
 
-## Overview
+## Installation
 
+1. Install Postgresql and set up the **main** and **inventory** databases. If these are not created and netcrawl will attempt to create them automatically.
+2. Follow any additional directions as needed to install `keyring` on your platform
+3. Add device and database credentials using `netcrawl -m`
 
-### File Structure
+## Usage
 
-#### log.txt
+Add new credentials:
+`netcrawl -m` 
 
-This is the operational log.
-* Timestamp
-* Process
-* Log Message
-* IP Address
+Scan one host with no logging output:
+`netcrawl -sS -v0 -t 10.1.1.1`
 
-```
-2017-02-02 23:05:27, get_raw_cdp_output       , # Enable successful on attempt 1. Current delay: 1, 10.1.103.3
-```
+Recursively inventory all devices from a seed device, skipping any neighbors who's CDP hostname matches that of a previously attempted (successful or not) device:
+`netcrawl -sR --skip-named-duplicates -t 10.1.1.1`
+
+Discover a network segment using Nmap:
+
 
 
 ## Built With
