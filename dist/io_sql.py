@@ -4,6 +4,7 @@ from psycopg2.extras import RealDictCursor
 from psycopg2 import errorcodes
 
 import psycopg2, wylog, time, traceback
+import credentials, config
 
 retry_args = {'stop_max_delay': 60000,  # Stop after 60 seconds
              'wait_exponential_multiplier': 100,  # Exponential backoff
@@ -58,9 +59,6 @@ class sql_database():
         # Create the tables in each database, overwriting if needed
         clean = kwargs.get('clean', False)
         self.create_database(dbname)
-        
-        self.conn = psycopg2.connect(dbname=dbname, user='wyko', password='pass', host='localhost')
-        
         self.create_table(drop_tables=clean)
     
     """
@@ -106,13 +104,13 @@ class sql_database():
         
         proc = 'sql_database.create_database'
         
-        with psycopg2.connect(dbname='postgres', user='wyko', password='pass', host='localhost') as conn:
+        with psycopg2.connect(**config.postgres_args()) as conn:
             with conn.cursor() as cur, sql_logger(proc):
                 cur.execute("SELECT 1 from pg_database WHERE datname= %s", (new_db,))
                 exists = bool(cur.fetchone()) 
             
         if not exists:
-            with psycopg2.connect(dbname='postgres', user='wyko', password='pass', host='localhost') as conn:
+            with psycopg2.connect(**config.postgres_args()) as conn:
                 conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
                 with conn.cursor() as cur, sql_logger(proc):
                     cur.execute('CREATE DATABASE {};'.format(new_db))
@@ -180,6 +178,9 @@ class main_db(sql_database):
         proc = 'main_db.__init__'
         
         self.DB_NAME = 'main'
+        
+        self.conn = psycopg2.connect(**config.main_args())
+        
         sql_database.__init__(self, self.DB_NAME, **kwargs)
         
         self.ignore_visited = kwargs.get('ignore_visited', True)
@@ -581,8 +582,10 @@ class device_db(sql_database):
     def __init__(self, **kwargs):
         proc = 'device_db.__init__'
         
+        self.conn = psycopg2.connect(**config.inventory_args())
+        
         self.DB_NAME = 'inventory'
-        sql_database.__init__(self, self.DB_NAME, **kwargs)
+        sql_database.__init__(self,self.DB_NAME, **kwargs)
         
     
     def __len__(self):

@@ -4,9 +4,10 @@ from time import sleep
 from wylog import logging, log
 
 import sys, argparse, textwrap, os, io_sql
-import config, cred_menu
+import config
 import queue, multiprocessing, traceback, nmap, json
 from wylog.logging import logf
+from credentials import menu
 
 @logf
 def normal_run(**kwargs):
@@ -303,7 +304,7 @@ def single_run(target, netmiko_platform= 'unknown'):
     # Output the device info to console
     print('\n' + str(device) + '\n')
     print(device.neighbor_table())
-
+    
 
 
 def parse_cli():
@@ -499,7 +500,7 @@ if __name__ == "__main__":
     
 
     if args.manage_creds:
-        cred_menu.start()
+        menu.start()
     
     if len(config.cc['credentials']) == 0:
         print('There are no stored credentials. You must first add them with -m')

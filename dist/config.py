@@ -1,9 +1,7 @@
-import keyring, os, config, ast, sys
-import configparser, cryptography
+import os
+import configparser
 
-from cryptography.fernet import Fernet
-from cmd import Cmd
-from wylog import logging, log
+from credentials.manage import get_device_creds, get_database_cred
 
 cc = {
     
@@ -90,6 +88,31 @@ def is_modified():
 def raise_exceptions():
     return cc['raise_exceptions']
 
+def postgres_args():
+    '''This just uses the main_db credentials'''
+    return {'dbname': 'postgres',
+            'user': cc['database']['main']['username'],
+            'password': cc['database']['main']['password'],
+            'host': cc['database']['main']['server'],
+            'port': cc['database']['main']['port'],
+            }
+
+def main_args():
+    return {'dbname': cc['database']['main']['dbname'],
+            'user': cc['database']['main']['username'],
+            'password': cc['database']['main']['password'],
+            'host': cc['database']['main']['server'],
+            'port': cc['database']['main']['port'],
+            }
+    
+def inventory_args():
+    return {'dbname': cc['database']['inventory']['dbname'],
+            'user': cc['database']['inventory']['username'],
+            'password': cc['database']['inventory']['password'],
+            'host': cc['database']['inventory']['server'],
+            'port': cc['database']['inventory']['port'],
+            }
+
 def pretty_time():
     return cc['time']['format']['pretty']
 
@@ -124,12 +147,10 @@ def parse_config():
     cc['verbosity']= settings['options'].getint('verbosity', 3)
     
     cc['database']['main']['dbname']= settings['main_database'].get('database_name', 'main')
-    cc['database']['main']['username']= settings['main_database'].get('username', 'svc_netmiko_main')
     cc['database']['main']['server']= settings['main_database'].get('server', 'localhost')
     cc['database']['main']['port']= settings['main_database'].getint('port', 5432)
 
     cc['database']['inventory']['dbname']= settings['inventory_database'].get('database_name', 'inventory')
-    cc['database']['inventory']['username']= settings['inventory_database'].get('username', 'svc_netmiko_inventory')
     cc['database']['inventory']['server']= settings['inventory_database'].get('server', 'localhost')
     cc['database']['inventory']['port']= settings['inventory_database'].getint('port', 5432)
     
@@ -153,66 +174,20 @@ def parse_config():
         raise IOError('Filepath could not be created: [{}]'.format(device_path()))
     
     # Populate credentials
-    cc['credentials']= get_vault_data()
+    cc['credentials']= get_device_creds()
+    if (cc['credentials'] is None or
+        len(cc['credentials']) == 0):
+        raise IOError('There are no device credentials. Add one with -m') 
     
+    _cred= get_database_cred()
+    if _cred is None:
+        raise IOError('There are no database credentials. Add one with -m') 
 
-
-def _get_fernet_key():
-    proc= 'config._get_fernet_key'
-    
-    # Retrieve the encryption key from storage or generate one
-    key= keyring.get_password('netcrawl', 'netcrawl')
-    if key is None:
-        log('Creating encryption key', v= logging.N, proc= proc)
-        key = Fernet.generate_key()
-        keyring.set_password('netcrawl', 'netcrawl', str(key, encoding='utf-8'))
     else:
-        key= bytes(key, encoding='utf-8')
-        
-    # Create a Fernet key from the base key
-    return Fernet(key)
-    del(key)
-
-
-def write_vault_data(data):
-    '''Overwrites all stored data with the new data'''
-    proc= 'config.write_vault_data'
+        cc['database']['main']['username']= _cred['username']
+        cc['database']['main']['password']= _cred['password']
+        cc['database']['inventory']['username']= _cred['username']
+        cc['database']['inventory']['password']= _cred['password']
     
-    f= _get_fernet_key()
-    
-    with open(config.vault_path(), 'w+b') as outfile:
-        outfile.write(f.encrypt(bytes(str(data), encoding='utf-8')))
-        
-    
-def get_vault_data():
-    proc= 'config.get_vault_data'
-    
-    # Create the vault if needed
-    if not os.path.isfile(config.vault_path()):
-        log('Creating Vault', 
-            proc=proc, v=logging.I)
-        with open(config.vault_path(), 'w+b'): pass
-    
-    with open(config.vault_path(), 'r+b') as outfile:
-        raw_vault= outfile.read()
-    
-    if len(raw_vault) <= 1:
-        log('Vault empty. Returning empty list', 
-            proc=proc, v=logging.I)
-        return []
-        
-    f= _get_fernet_key()
-    
-    try: output= f.decrypt(raw_vault)
-    except cryptography.fernet.InvalidToken: 
-        log('Vault data invalid. Returning empty list', 
-            proc=proc, v=logging.A)
-        return []
-    else:
-        return ast.literal_eval(str(output, encoding='utf-8'))    
-    finally:
-        del(f)
-
-
 
 

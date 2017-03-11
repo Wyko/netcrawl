@@ -162,8 +162,8 @@ class network_device():
         entry = ''
         if sh_name: entry += '     {name:^30}  '.format(name='Neighbor Name')
         if sh_src: entry += '{src:^25} '.format(src='Source Interface')
-        if sh_platform: entry += '{platform:^10} '.format(platform='Platform')
-        if sh_ip: entry += '{ip:^15} '.format(ip='IP')
+        if sh_platform: entry += '{platform:^20} '.format(platform='Platform')
+        if sh_ip: entry += '{ip:^30} '.format(ip='IP')
         entries.append(entry)
         
         # Populate the table
@@ -171,8 +171,8 @@ class network_device():
             entry = '-- '
             if sh_name: entry += '{name:30.29}, '.format(name=n['device_name'])
             if sh_src: entry += '{src:25}, '.format(src=n['source_interface'])
-            if sh_platform: entry += '{platform}'.format(platform=n['system_platform'])
-            if sh_ip: entry += '{ip:15}, '.format(ip=str(n['ip_list']))
+            if sh_platform: entry += '{platform:23}, '.format(platform=n['system_platform'])
+            if sh_ip: entry += '{ip} '.format(ip=str(n['ip_list']))
             entries.append(entry)
         
         entries.append('\n* Un-Matched source interface')
