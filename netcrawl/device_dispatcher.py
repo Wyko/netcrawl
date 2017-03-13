@@ -2,18 +2,18 @@
 
 Credit: Kirk Byers
 """
-from Devices.base_device import network_device
-from netmiko.ssh_autodetect import SSHDetect
-from Devices.nxos_device import nxos_device
-from Devices.ios_device import ios_device
-from wylog import log, logging
 
-import cli, util
+from netmiko.ssh_autodetect import SSHDetect
+
+from . import cli
+from .devices import IosDevice, NxosDevice
+from .wylog import log, logging
+
 
 # The keys of this dictionary are the supported device_types
 CLASS_MAPPER_BASE = {
-    'cisco_ios': ios_device,
-    'cisco_nxos': nxos_device,
+    'cisco_ios': IosDevice,
+    'cisco_nxos': NxosDevice,
 }
 
 # Also support keys that end in _ssh
@@ -25,7 +25,7 @@ for k, v in CLASS_MAPPER_BASE.items():
 CLASS_MAPPER = new_mapper
 
 # Add telnet drivers
-CLASS_MAPPER['cisco_ios_telnet'] = ios_device
+CLASS_MAPPER['cisco_ios_telnet'] = IosDevice
 
 platforms = list(CLASS_MAPPER.keys())
 platforms.sort()

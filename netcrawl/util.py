@@ -1,9 +1,6 @@
-from datetime import datetime
 from contextlib import closing
-from multiprocessing import Lock
-
-import socket, os, re, time
-
+from netaddr import IPNetwork
+import socket, re, time
 
 
 def getCreds():
@@ -27,6 +24,10 @@ def getCreds():
     return [{'username': username, 'password': password, 'type': 'User Entered'}]  
 
 
+def ucase_letters(raw_input):
+        return ''.join([x.upper() for x in raw_input if re.match(r'\w', x)])
+
+
 def contains_mac_address(mac):
     '''Simple boolean operator to determine if a string contains a mac anywhere
     within it.'''
@@ -38,6 +39,22 @@ def contains_mac_address(mac):
             [0-9A-F]{2,4}  # Followed by one last set of Hex
         ''',
         mac, re.I | re.X))
+
+
+def network_ip(ip, subnet):
+    
+    if not is_ip(ip): 
+        raise TypeError('IP [{}] is not a valid ip'.format(ip))
+    
+    # Handle CIDR
+    if not is_ip(subnet):
+        try: subnet= cidr_to_netmask(subnet)
+        except ValueError:
+            raise TypeError(
+                'Subnet [{}] is not a valid ip or CIDR'.format(subnet))
+    
+    return str(IPNetwork( '{}/{}'.format(
+            ip, subnet)).network)
 
 
 def parse_ip(raw_input):
@@ -58,13 +75,23 @@ def parse_ip(raw_input):
 
 
 def is_ip(raw_input):
-    output = re.search(r"(^1[0-9]{1,3}(?:\.\d{1,3}){3}$)", raw_input)
+    '''Returns true if the given string is an IPv4 address'''
+    if not isinstance(raw_input, str):
+        raise TypeError('[{}] is not a string'.format(
+            raw_input))
     
-    if output and output.group(1):
-        return True
-    else:
-        return False
-
+    match= re.match(r'''
+        (?:
+            (?:
+                25[0-5]|          # Match 250-255
+                2[0-4][0-9]|      # Match 200-249
+                [01]?[0-9][0-9]?  # Match 0-199
+            )
+            (?:\.|\b)             # Followed by a . or a word boundry
+        ){4}                      # Repeat that four times
+        ''', raw_input, re.X)
+    
+    return bool(match)
 
 def netmask_to_cidr(netmask):
     return sum([bin(int(x)).count("1") for x in netmask.split(".")])
@@ -91,6 +118,13 @@ def cidr_to_netmask(cidr):
     return '.'.join([str((0xffffffff << (32 - cidr) >> i) & 0xff)
                     for i in [24, 16, 8, 0]])
 
+
+def clean_ip(ip):
+    '''Removes all non-digit or period characters from
+    the source string'''
+    
+    return ''.join([x for x in ip if re.match(r'[\d\.]', x)])
+        
 
 def timeit(method):
     def timed(*args, **kw):

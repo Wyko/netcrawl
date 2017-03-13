@@ -1,13 +1,13 @@
-from device_dispatcher import create_instantiated_device
+import queue, multiprocessing, traceback, nmap, json
+import sys, argparse, textwrap 
 from time import sleep
 
-from wylog import logging, log
+from . import config, io_sql
+from .tools import mac_audit
+from .credentials import menu
+from .device_dispatcher import create_instantiated_device
+from .wylog import logging, log, logf
 
-import sys, argparse, textwrap, os, io_sql
-import config
-import queue, multiprocessing, traceback, nmap, json
-from wylog.logging import logf
-from credentials import menu
 
 @logf
 def normal_run(**kwargs):
@@ -291,7 +291,11 @@ def single_run(target, netmiko_platform= 'unknown'):
     
     log('Processing connection to {}'.format(target), proc=proc, v=logging.H)
     
-    device = create_instantiated_device(ip=target, netmiko_platform=netmiko_platform)
+    try: device = create_instantiated_device(ip=target, netmiko_platform=netmiko_platform)
+    except Exception as e: 
+        log('Connection to {} failed: {}'.format(
+            device.ip, str(e)), proc=proc, v= logging.C)
+    
     
     # Process the device
     try: device.process_device()
@@ -478,9 +482,15 @@ def parse_cli():
     return args
 
     
-if __name__ == "__main__":
+def main():
     proc = 'main.__main__'
     
+    # Process the settings file
+    config.parse_config()
+    
+#     mac_audit.run_audit(r"C:\Users\Wyko\git\netcrawl\tests\examples\ap_rogue_report.csv")
+#     return True
+
     # Parse CLI arguments
     if len(sys.argv[1:]) > 0: 
         args = parse_cli()
@@ -488,8 +498,10 @@ if __name__ == "__main__":
         print('No arguments passed.')
         sys.exit()
     
-    # Process the settings file
-    config.parse_config()
+    log('Start new run', 
+        new_log=True,
+        v= logging.HIGH,
+        proc= proc)
     
     # Set verbosity level for wylog
     logging.VERBOSITY = args.v

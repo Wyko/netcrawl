@@ -6,10 +6,11 @@ Created on Feb 28, 2017
 
 from netmiko import NetMikoAuthenticationException
 from netmiko import NetMikoTimeoutException
-from util import port_is_open, getCreds
-from wylog import log, logging
 
-import config
+from . import config
+from .util import port_is_open
+from .wylog import log, logging
+
 
 def start_cli_session(handler=None,
                       netmiko_platform=None,

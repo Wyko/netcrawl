@@ -4,17 +4,16 @@ Created on Feb 19, 2017
 @author: Wyko
 '''
 
-from Devices.cisco_device import cisco_device
-from Devices.base_device import interface
-from wylog import log, logging
-
 import re
 
+from . import CiscoDevice, Interface
+from ..wylog import log, logging
 
-class ios_device(cisco_device):
+
+class IosDevice(CiscoDevice):
    
     def _get_interfaces(self):
-        proc = 'ios_device.parse_ios_interfaces'
+        proc = 'IosDevice.parse_ios_interfaces'
         log('Starting ios interface parsing.', proc=proc, v=logging.I)
         
         interfaces = []
@@ -29,7 +28,7 @@ class ios_device(cisco_device):
         # For each interface parsed from the raw config, create a new interface 
         # object and parse it into structured data
         for interf in raw_interfaces:
-            i = interface()
+            i = Interface()
             
             # Add the raw config data to the interface
             i.raw_interface = interf

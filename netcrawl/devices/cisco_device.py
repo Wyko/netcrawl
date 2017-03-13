@@ -4,17 +4,19 @@ Created on Feb 19, 2017
 @author: Wyko
 '''
 
-from Devices.base_device import network_device, interface
-from wylog import log, logging
-from util import parse_ip
+import re
 from time import sleep
-import re, util
-import config
 
-class cisco_device(network_device):
+from .. import util, config
+from ..util import parse_ip
+from ..wylog import log, logging
+from .base import NetworkDevice, Interface
+
+
+class CiscoDevice(NetworkDevice):
         
     def _parse_hostname(self, attempts=5):
-        proc = 'cisco_device._parse_hostname'
+        proc = 'CiscoDevice._parse_hostname'
         log('Parsing hostname', proc=proc, v=logging.I)
         
         output = re.search('^hostname (.+)\n', self.config, re.MULTILINE)
@@ -54,7 +56,7 @@ class cisco_device(network_device):
 
     
     def _get_serials(self):
-        proc = 'cisco_device._get_serials'
+        proc = 'CiscoDevice._get_serials'
         
         log('Starting to get serials', proc=proc, v=logging.I)
         
@@ -125,7 +127,7 @@ class cisco_device(network_device):
         Raises:
             Exception: ValueError if no result was found.
         '''
-        proc = 'cisco_device._get_mac_address_table'
+        proc = 'CiscoDevice._get_mac_address_table'
 
         log('Getting MAC address table', proc=proc, v=logging.I)
         
@@ -177,13 +179,13 @@ class cisco_device(network_device):
            
             # If no match was found, create a new interface for it and append it to the list
             if not interf:
-                interf = interface()
+                interf = Interface()
                 interf.interface_description = '**** Matched from MAC Address, not interface list'
                 interf.interface_name = mac['interface_name']
                 self.interfaces.append(interf)
             
             # Normalize the MAC
-            mac['mac_address'] = self._normalize_mac_address(mac['mac_address'])
+            mac['mac_address'] = util.ucase_letters(mac['mac_address'])
             
             # Add the MAC to the interface
             interf.mac_address_table.append(mac['mac_address'])
@@ -193,7 +195,7 @@ class cisco_device(network_device):
 
 
     def _get_config(self, attempts=5):
-        proc = 'cisco_device._get_config'
+        proc = 'CiscoDevice._get_config'
         
         log('Beginning config download from %s' % self.connection.ip, proc=proc, v=logging.I)
 
@@ -208,14 +210,14 @@ class cisco_device(network_device):
     
     
     def _get_other_ips(self):
-        proc = 'cisco_device._get_other_ips'
+        proc = 'CiscoDevice._get_other_ips'
         output = re.findall(r'(?:glbp|hsrp|standby).*?(\d{1,3}(?:\.\d{1,3}){3})', self.config, re.I)
         log('{} non-standard (virtual) ips found on the device'.format(len(output)), proc=proc, v=logging.D)
         self.other_ips.extend(output)
         
     
     def _get_cdp_neighbors(self, attempts=3):
-        proc = 'cisco_device._get_cdp_neighbors'
+        proc = 'CiscoDevice._get_cdp_neighbors'
 
         log('Getting CDP neighbors', proc=proc, v=logging.I)
         
@@ -275,7 +277,7 @@ class cisco_device(network_device):
         3. If so, check if the interface number matches the partial interface number
         4. Return the full interface name
         '''
-        proc = 'cisco_device.match_partial_to_full_interface'
+        proc = 'CiscoDevice.match_partial_to_full_interface'
         
         if not partial: return None
         # Split the MAC

@@ -6,8 +6,10 @@ Created on Mar 11, 2017
 
 import cryptography, hashlib
 from cryptography.fernet import Fernet
-import keyring, os, config, ast
-from wylog import logging, log
+import keyring, os, ast
+
+from .. import config
+from ..wylog import logging, log
 
 
 def _get_fernet_key():
@@ -42,7 +44,8 @@ def _get_vault_data():
     
     # Create the vault if needed
     if not os.path.isfile(config.vault_path()):
-        log('Creating Vault', 
+        log('Creating Vault in [{}]'.format(
+            config.vault_path()), 
             proc=proc, v=logging.I)
         with open(config.vault_path(), 'w+b'): pass
     
@@ -51,7 +54,8 @@ def _get_vault_data():
     
     # Check for an empty dictionary
     if len(raw_vault) <= 1:
-        log('Vault empty. Returning None', 
+        log('Vault empty in[{}]'.format(
+            config.vault_path()), 
             proc=proc, v=logging.I)
         return _validate_vault(None)
         

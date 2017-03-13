@@ -1,10 +1,11 @@
-from wylog import log, logf, logging
+from psycopg2 import errorcodes
+import psycopg2, time, traceback
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from psycopg2.extras import RealDictCursor
-from psycopg2 import errorcodes
 
-import psycopg2, wylog, time, traceback
-import credentials, config
+from . import config
+from .wylog import log, logf, logging
+
 
 retry_args = {'stop_max_delay': 60000,  # Stop after 60 seconds
              'wait_exponential_multiplier': 100,  # Exponential backoff
@@ -97,6 +98,13 @@ class sql_database():
                 with conn.cursor() as cur, sql_logger(proc):
                     return _execute(db_name, cur)
     """            
+    
+    
+    @logf
+    def execute_sql(self, *args):
+        with self.conn, self.conn.cursor() as cur:
+            cur.execute(*args)
+            return cur.fetchall()
             
     @logf
     def create_database(self, new_db):
@@ -596,6 +604,16 @@ class device_db(sql_database):
         return sql_database.ip_exists(self, ip, 'interfaces')
     
     
+    def macs_at_subnet(self, subnet):
+        with self.conn, self.conn.cursor() as cur:
+            cur.execute('''
+                SELECT mac_id, mac_address, network_ip
+                FROM mac
+                JOIN interfaces ON mac.interface_id=interfaces.interface_id
+                WHERE network_ip = %s
+                ''', (subnet, ) )
+            return cur.fetchall()
+    
     def unique_name_exists(self, name):
         '''Returns True if a given unique_name already exists'''
         proc = 'io_sql.unique_name_exists'
@@ -742,7 +760,8 @@ class device_db(sql_database):
                 subnet,
                 virtual_ip,
                 description,
-                raw_interface
+                raw_interface,
+                network_ip
                 )
             VALUES (
                 %(device_id)s,
@@ -753,7 +772,8 @@ class device_db(sql_database):
                 %(subnet)s,
                 %(virtual_ip)s,
                 %(description)s,
-                %(raw_interface)s
+                %(raw_interface)s,
+                %(network_ip)s
                 )
             RETURNING interface_id;
             ''',
@@ -767,6 +787,7 @@ class device_db(sql_database):
             'virtual_ip': interf.virtual_ip,
             'description': interf.interface_description,
             'raw_interface': interf.raw_interface,
+            'network_ip': interf.network_ip,
             })
         return cur.fetchone()[0]
     
@@ -937,6 +958,7 @@ class device_db(sql_database):
                         virtual_ip         TEXT,
                         description        TEXT,
                         raw_interface      TEXT,
+                        network_ip         TEXT,
                         updated            TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
                         FOREIGN KEY(device_id) REFERENCES Devices(device_id) 
                             ON DELETE CASCADE ON UPDATE CASCADE

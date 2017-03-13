@@ -1,9 +1,9 @@
 from cmd import Cmd
-import getpass, textwrap, config
+import getpass, textwrap
 import sys
 
-from wylog import logging
-from credentials import manage
+from . import manage
+from ..wylog import logging
 
 
 class UserPrompt(Cmd):
@@ -106,7 +106,7 @@ class DeleteDeviceCred(UserPrompt):
         R) Return to main menu 
         Q) Exit
         ''')    
-    prompt = 'netcrawl:devices:delete> '
+    prompt = 'main:devices:delete> '
     
     def preloop(self):
         print(manage.list_device_creds())

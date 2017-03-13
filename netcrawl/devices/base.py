@@ -1,14 +1,15 @@
-from netmiko import ConnectHandler
-from wylog import log, logging
 from datetime import datetime
+import re, hashlib, os
 from time import sleep
-from util import is_ip
 
-import re, hashlib, util, os, cli
-import config
+from netmiko import ConnectHandler
+
+from .. import config, util, cli
+from .. util import is_ip, network_ip
+from .. wylog import log, logging, logf, log_snip
 
 
-class interface():
+class Interface():
     '''Generic network device interface'''
     def __init__(self, **kwargs):
         
@@ -25,13 +26,21 @@ class interface():
         self.interface_ip = kwargs.pop('interface_ip', None)
         self.interface_id = kwargs.pop('interface_id', None)
         self.virtual_ip = kwargs.pop('virtual_ip', None)
+        self.network_ip = kwargs.pop('network_ip', None)
         self.device_id = kwargs.pop('device_id', None)
         
         # Mutable Arguments
         self.mac_address_table = []
         self.neighbors = []
         
-
+        
+    def get_network_ip(self):
+        if (self.interface_ip is not None and
+            self.interface_subnet is not None):
+        
+            self.network_ip= network_ip(self.interface_ip,
+                                        self.interface_subnet)
+        
     
     def __str__(self):
             
@@ -41,7 +50,7 @@ class interface():
     
 
 
-class network_device():
+class NetworkDevice():
     '''Generic network device'''
     def __init__(self, **kwargs):
         # Immutable arguments
@@ -278,13 +287,14 @@ class network_device():
         # Functions that must work consecutively in order to proceed
         # On error, these raise an exception and fail the processing
         for fn in (
-            self._enable(),
-            self._get_config(),
-            self._parse_hostname(),
-            self._get_interfaces(),
+            self._enable,
+            self._get_config,
+            self._parse_hostname,
+            self._get_interfaces,
             ):
             try:
-                fn
+                with log_snip(fn.__name__): 
+                    fn()
             except Exception as e:
                 self.alert(msg=fn.__name__ + ' - Error: ' + str(e),
                            proc=proc,)
@@ -293,14 +303,16 @@ class network_device():
         # These are optional, and only leave a log message when they 
         # fail (unless SUPPRESS_EXCEPTION has been set False)
         for fn in (
-            self._get_serials(),
-            self._get_other_ips(),
-            self._get_cdp_neighbors(),
-            self._get_mac_address_table(),
-            self._normalize_netmasks()  # Must be after all IP polling
+            self._get_serials,
+            self._get_other_ips,
+            self._get_cdp_neighbors,
+            self._get_mac_address_table,
+            self._normalize_netmasks,  # Must be after all IP polling
+            self._calc_network_addresses,
             ):
             try: 
-                fn
+                with logging.log_snip(fn.__name__): 
+                    fn()
             except Exception as e:
                 self.alert(fn.__name__ + ' - Error: ' + str(e), proc=proc)
                 if config.raise_exceptions(): raise
@@ -311,6 +323,13 @@ class network_device():
         self.connection = None
         return True
     
+    
+    def _calc_network_addresses(self):
+        ''' Iterates through each interface and gets 
+        the network address for it'''
+        
+        for i in self.interfaces:
+            i.get_network_ip()
     
     
     def _get_serials(self):
@@ -341,11 +360,6 @@ class network_device():
             except ValueError: pass
             else: i.interface_subnet = netmask
     
-    
-    def _normalize_mac_address(self, mac):
-        return ''.join([x.upper() for x in mac if re.match(r'\w', x)])
-    
-      
     
     def _enable(self, attempts=3):
         '''Enter enable mode.

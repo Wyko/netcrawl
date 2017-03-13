@@ -1,7 +1,8 @@
-import os
 import configparser
+import os
 
-from credentials.manage import get_device_creds, get_database_cred
+from .credentials.manage import get_device_creds, get_database_cred
+
 
 cc = {
     
@@ -16,7 +17,7 @@ cc = {
     'debug': False,
     
     # Raise errors encountered during device processing
-    'raise_exceptions': False,
+    'raise_exceptions': True,
     
     'working_dir': None,
     
@@ -38,6 +39,11 @@ cc = {
     'file': {
         
         'root_path': None,
+        
+        'log': {
+            'name': 'log.txt',
+            'full_path': None,
+        },
         
         'run': {
             'folder': 'netcrawl',
@@ -125,6 +131,9 @@ def run_path():
 def creds():
     return cc['credentials']
 
+def log_path():
+    return cc['file']['log']['full_path']
+
 def device_path():
     return cc['file']['devices']['full_path']
 
@@ -136,6 +145,8 @@ def set_working_dir():
 
 def parse_config():
     proc= 'config.parse_config'
+    
+    cc['modified']= True
     set_working_dir()
     
     # Read the settings file
@@ -157,6 +168,7 @@ def parse_config():
     cc['time']['format']['pretty']= settings['time_formats'].get('pretty', '%Y-%m-%d %H:%M:%S')
     cc['time']['format']['file']= settings['time_formats'].get('file', '%Y%m%d_%H%M%S')
     
+    
     # Set the root path
     
     # If settings root_path is blank, use OS root
@@ -168,10 +180,15 @@ def parse_config():
     # Parse and make the runtime folders
     cc['file']['run']['full_path']= os.path.join(cc['file']['root_path'], cc['file']['run']['folder'])    
     cc['file']['devices']['full_path']= os.path.join(cc['file']['run']['full_path'], cc['file']['devices']['folder'])
+    # Get the log path
+    cc['file']['log']['full_path'] = os.path.join(cc['file']['run']['full_path'],
+                                                  cc['file']['log']['name'])
+
     os.makedirs(device_path(), exist_ok= True)
     
     if not os.path.isdir(device_path()):
         raise IOError('Filepath could not be created: [{}]'.format(device_path()))
+    
     
     # Populate credentials
     cc['credentials']= get_device_creds()
