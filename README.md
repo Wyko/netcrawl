@@ -87,7 +87,6 @@ These instructions will get you a copy of the project up and running on your loc
 ### Manual Install
 * *[PostgreSQL](https://www.postgresql.org/)*
 
-
 ### Optional - Nmap
 Without installing this, you will not be able to use the -sN function.
 
@@ -96,6 +95,10 @@ Without installing this, you will not be able to use the -sN function.
 
 `pip install python-nmap`
 
+
+### Testing
+
+`pip install Faker pytest`
 
 ## Installation
 
