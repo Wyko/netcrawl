@@ -1,6 +1,5 @@
 netmiko
 python-nmap
-wylog
 keyring
 cryptography
 psycopg2 

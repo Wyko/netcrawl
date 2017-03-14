@@ -41,9 +41,11 @@ def test_can_open_csv():
     assert len(c) > 2 
 
 
-def test_audit_runs_without_error():
-    _path= _example('ap_rogue_report.csv')
-    mac_audit.run_audit(_path)
+#===============================================================================
+# def test_audit_runs_without_error():
+#     _path= _example('ap_rogue_report.csv')
+#     mac_audit.run_audit(_path)
+#===============================================================================
 
 def _strip_mac(mac):
     return ''.join([x.upper() for x in mac if re.match(r'\w', x)])
