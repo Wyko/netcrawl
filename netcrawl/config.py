@@ -38,7 +38,8 @@ cc = {
         
     'file': {
         
-        'root_path': os.path.abspath(os.sep),
+#         'root_path': os.path.abspath(os.sep),
+        'root_path': os.path.join(os.path.expanduser('~'), 'netcrawl'),
         
         'log': {
             'name': 'log.txt',
