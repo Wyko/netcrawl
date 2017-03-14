@@ -1,4 +1,3 @@
-import configparser
 import os
 
 from .credentials.manage import get_device_creds, get_database_cred
@@ -39,7 +38,7 @@ cc = {
         
     'file': {
         
-        'root_path': None,
+        'root_path': os.path.abspath(os.sep),
         
         'log': {
             'name': 'log.txt',
@@ -69,19 +68,19 @@ cc = {
         
     'database': {
         'main': {
-            'dbname': None,
             'username': None,
             'password': None,
-            'server': None,
-            'port': None,
+            'dbname': 'main',
+            'server': 'localhost',
+            'port': 5432,
         },
         
         'inventory': {
-            'dbname': None,
             'username': None,
             'password': None,
-            'server': None,
-            'port': None,
+            'dbname': 'inventory',
+            'server': 'localhost',
+            'port': 5432,
         },
     }
 }
@@ -150,78 +149,12 @@ def set_working_dir():
 def setting_path():
     return os.path.join(working_dir(), 'settings.ini')
 
-def open_settings():
-    assert cc['working_dir'] is not None
-    assert os.path.exists(cc['working_dir'])
-    
-    if not os.path.isfile(setting_path()):
-        with open(setting_path(), 'w') as outfile:
-            outfile.write(textwrap.dedent(r'''
-            [options]
-            debug= False
-            verbosity= 3
-            
-            [main_database]
-            dbname = main
-            server = localhost
-            port = 5432
-            
-            [inventory_database]
-            dbname = inventory
-            server = localhost
-            port = 5432
-            
-            [time_formats]
-            pretty = %Y-%m-%d %H:%M:%S
-            file = %Y%m%d_%H%M%S
-            
-            [filepaths]
-            # If blank, will resolve to the root directory, i.e. "C:\"
-            root_path= 
-            
-            # Read the settings file
-            settings = configparser.RawConfigParser()
-            settings.read(os.path.join(cc['working_dir'], 'settings.ini'))
-            '''))
-    
-    # Read the settings file
-    settings = configparser.RawConfigParser()
-    settings.read(os.path.join(cc['working_dir'], 'settings.ini'))
-    
-    return settings
-
 
 def parse_config():
     proc= 'config.parse_config'
     
     cc['modified']= True
     set_working_dir()
-    
-    settings= open_settings()
-    
-    # Parse the settings file
-    cc['debug']= settings['options'].getboolean('debug', False)
-    cc['verbosity']= settings['options'].getint('verbosity', 3)
-    
-    cc['database']['main']['dbname']= settings['main_database'].get('database_name', 'main')
-    cc['database']['main']['server']= settings['main_database'].get('server', 'localhost')
-    cc['database']['main']['port']= settings['main_database'].getint('port', 5432)
-
-    cc['database']['inventory']['dbname']= settings['inventory_database'].get('database_name', 'inventory')
-    cc['database']['inventory']['server']= settings['inventory_database'].get('server', 'localhost')
-    cc['database']['inventory']['port']= settings['inventory_database'].getint('port', 5432)
-    
-    cc['time']['format']['pretty']= settings['time_formats'].get('pretty', '%Y-%m-%d %H:%M:%S')
-    cc['time']['format']['file']= settings['time_formats'].get('file', '%Y%m%d_%H%M%S')
-    
-    
-    # Set the root path
-    
-    # If settings root_path is blank, use OS root
-    if settings['filepaths'].get('root_path', None) == '':
-        cc['file']['root_path']= os.path.abspath(os.sep)
-        
-    else: cc['file']['root_path']= settings['filepaths'].get('root_path', os.path.abspath(os.sep))
     
     # Parse and make the runtime folders
     cc['file']['run']['full_path']= os.path.join(cc['file']['root_path'], cc['file']['run']['folder'])    

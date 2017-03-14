@@ -19,7 +19,3 @@ def test_set_working_dir():
     assert os.path.exists(config.cc['working_dir'])
 
 
-def test_open_settings():
-    settings= config.open_settings()
-    
-    assert 'options' in settings
