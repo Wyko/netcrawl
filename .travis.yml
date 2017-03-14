@@ -20,4 +20,8 @@ install:
 # command to run tests
 script: pytest
 
-sudo: required
+#sudo: required
+
+os:
+  - linux
+  - osx
