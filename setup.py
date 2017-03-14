@@ -16,6 +16,7 @@ install_requires = [
     'keyring',
     'cryptography',
     'psycopg2',
+    'netaddr',
     ]
 
 tests_require = [
@@ -25,7 +26,7 @@ tests_require = [
 
 setup(
     name = "netcrawl",
-    version = "0.3.0-beta",
+    version = "0.3.1-beta",
     author = "Wyko ter Haar",
     author_email = "vegaswyko@gmail.com",
     description = ("Netcrawl is a network discovery tool designed to poll one or more devices, inventory them, and then continue the process through the device's neighbors."),
