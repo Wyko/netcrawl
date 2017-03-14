@@ -2,5 +2,6 @@ netmiko
 python-nmap
 keyring
 cryptography
-psycopg2 
+psycopg2
+netaddr 
 faker
