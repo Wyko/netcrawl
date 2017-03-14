@@ -10,6 +10,19 @@ from setuptools import setup
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
+install_requires = [
+    'netmiko',
+    'python-nmap',
+    'keyring',
+    'cryptography',
+    'psycopg2',
+    ]
+
+tests_require = [
+    'Faker',
+    'pytest',
+    ]
+
 setup(
     name = "netcrawl",
     version = "0.3.0-beta",
