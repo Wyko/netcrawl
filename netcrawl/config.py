@@ -156,7 +156,7 @@ def open_settings():
     
     if not os.path.isfile(setting_path()):
         with open(setting_path(), 'w') as outfile:
-            outfile.write(textwrap.dedent('''
+            outfile.write(textwrap.dedent(r'''
             [options]
             debug= False
             verbosity= 3
