@@ -13,7 +13,6 @@ def setup_module(module):
 def _example(file):
     '''Returns the data from a given example file as a string'''
     
-    
     _file= os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
         'examples',

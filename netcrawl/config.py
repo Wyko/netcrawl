@@ -2,6 +2,7 @@ import configparser
 import os
 
 from .credentials.manage import get_device_creds, get_database_cred
+import textwrap
 
 
 cc = {
@@ -140,8 +141,55 @@ def device_path():
 def vault_path():
     return os.path.join(cc['file']['run']['full_path'], 'vault')
 
+def working_dir():
+    return cc['working_dir']
+
 def set_working_dir():
-    cc['working_dir']= os.path.dirname(os.path.realpath(__file__))
+    cc['working_dir']= os.path.dirname(os.path.abspath(__file__))
+
+def setting_path():
+    return os.path.join(working_dir(), 'settings.ini')
+
+def open_settings():
+    assert cc['working_dir'] is not None
+    assert os.path.exists(cc['working_dir'])
+    
+    if not os.path.isfile(setting_path()):
+        with open(setting_path(), 'w') as outfile:
+            outfile.write(textwrap.dedent('''
+            [options]
+            debug= False
+            verbosity= 3
+            
+            [main_database]
+            dbname = main
+            server = localhost
+            port = 5432
+            
+            [inventory_database]
+            dbname = inventory
+            server = localhost
+            port = 5432
+            
+            [time_formats]
+            pretty = %Y-%m-%d %H:%M:%S
+            file = %Y%m%d_%H%M%S
+            
+            [filepaths]
+            # If blank, will resolve to the root directory, i.e. "C:\"
+            root_path= 
+            
+            # Read the settings file
+            settings = configparser.RawConfigParser()
+            settings.read(os.path.join(cc['working_dir'], 'settings.ini'))
+            '''))
+    
+    # Read the settings file
+    settings = configparser.RawConfigParser()
+    settings.read(os.path.join(cc['working_dir'], 'settings.ini'))
+    
+    return settings
+
 
 def parse_config():
     proc= 'config.parse_config'
@@ -149,9 +197,7 @@ def parse_config():
     cc['modified']= True
     set_working_dir()
     
-    # Read the settings file
-    settings = configparser.RawConfigParser()
-    settings.read(os.path.join(cc['working_dir'], 'settings.ini'))
+    settings= open_settings()
     
     # Parse the settings file
     cc['debug']= settings['options'].getboolean('debug', False)
