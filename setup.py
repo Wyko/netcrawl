@@ -36,6 +36,7 @@ setup(
               'netcrawl.credentials',
               'netcrawl.devices',
               'netcrawl.tools',
+              'netcrawl.wylog',
               'tests'
 			 ],
     long_description= read('README.md'),
