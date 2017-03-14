@@ -3,3 +3,4 @@ python-nmap
 keyring
 cryptography
 psycopg2 
+pytest
