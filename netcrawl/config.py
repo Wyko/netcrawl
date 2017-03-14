@@ -194,11 +194,10 @@ def parse_config():
     cc['credentials']= get_device_creds()
     
     _cred= get_database_cred()
-    else:
-        cc['database']['main']['username']= _cred['username']
-        cc['database']['main']['password']= _cred['password']
-        cc['database']['inventory']['username']= _cred['username']
-        cc['database']['inventory']['password']= _cred['password']
+    cc['database']['main']['username']= _cred['username']
+    cc['database']['main']['password']= _cred['password']
+    cc['database']['inventory']['username']= _cred['username']
+    cc['database']['inventory']['password']= _cred['password']
     
 
 def check_credentials():
