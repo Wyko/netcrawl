@@ -192,19 +192,30 @@ def parse_config():
     
     # Populate credentials
     cc['credentials']= get_device_creds()
-    if (cc['credentials'] is None or
-        len(cc['credentials']) == 0):
-        raise IOError('There are no device credentials. Add one with -m') 
     
     _cred= get_database_cred()
-    if _cred is None:
-        raise IOError('There are no database credentials. Add one with -m') 
-
     else:
         cc['database']['main']['username']= _cred['username']
         cc['database']['main']['password']= _cred['password']
         cc['database']['inventory']['username']= _cred['username']
         cc['database']['inventory']['password']= _cred['password']
     
+
+def check_credentials():
+    if (cc['credentials'] is None or
+        len(cc['credentials']) == 0):
+        raise IOError('There are no device credentials. Add one with -m') 
+    
+    if (cc['database']['main']['username'] is None
+        or cc['database']['main']['password'] is None):
+        raise IOError('There are no database credentials. Add one with -m') 
+
+
+
+
+
+
+
+
 
 
