@@ -31,7 +31,7 @@ setup(
     description = ("Netcrawl is a network discovery tool designed to poll one or more devices, inventory them, and then continue the process through the device's neighbors."),
     license = "MIT",
     keywords = "cisco cdp network",
-    url = "https://github.com/Wyko/wylog",
+    url = "https://github.com/Wyko/netcrawl",
     packages=['netcrawl',
               'netcrawl.credentials',
               'netcrawl.devices',
