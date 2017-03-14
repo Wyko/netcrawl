@@ -32,7 +32,7 @@ def test_disallows_bad_files():
         
         
 def test_can_open_csv():
-    _path= _example('ap_rogue_report.csv')
+    _path= _example('ip_subnet_mac.csv')
     
     print('Example path is [{}]'.format(_path))
     c= mac_audit._open_csv(_path)
