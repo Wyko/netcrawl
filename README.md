@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/Wyko/netcrawl.svg?branch=master)](https://travis-ci.org/Wyko/netcrawl)
+
 # netcrawl
 
 Netcrawl is a network discovery tool designed to poll one or more devices, inventory them, and then continue the process through the device's neighbors.

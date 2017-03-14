@@ -1,7 +1,7 @@
-import configparser
 import os
 
 from .credentials.manage import get_device_creds, get_database_cred
+import textwrap
 
 
 cc = {
@@ -38,7 +38,8 @@ cc = {
         
     'file': {
         
-        'root_path': None,
+#         'root_path': os.path.abspath(os.sep),
+        'root_path': os.path.join(os.path.expanduser('~'), 'netcrawl'),
         
         'log': {
             'name': 'log.txt',
@@ -68,19 +69,19 @@ cc = {
         
     'database': {
         'main': {
-            'dbname': None,
             'username': None,
             'password': None,
-            'server': None,
-            'port': None,
+            'dbname': 'main',
+            'server': 'localhost',
+            'port': 5432,
         },
         
         'inventory': {
-            'dbname': None,
             'username': None,
             'password': None,
-            'server': None,
-            'port': None,
+            'dbname': 'inventory',
+            'server': 'localhost',
+            'port': 5432,
         },
     }
 }
@@ -140,42 +141,21 @@ def device_path():
 def vault_path():
     return os.path.join(cc['file']['run']['full_path'], 'vault')
 
+def working_dir():
+    return cc['working_dir']
+
 def set_working_dir():
-    cc['working_dir']= os.path.dirname(os.path.realpath(__file__))
+    cc['working_dir']= os.path.dirname(os.path.abspath(__file__))
+
+def setting_path():
+    return os.path.join(working_dir(), 'settings.ini')
+
 
 def parse_config():
     proc= 'config.parse_config'
     
     cc['modified']= True
     set_working_dir()
-    
-    # Read the settings file
-    settings = configparser.RawConfigParser()
-    settings.read(os.path.join(cc['working_dir'], 'settings.ini'))
-    
-    # Parse the settings file
-    cc['debug']= settings['options'].getboolean('debug', False)
-    cc['verbosity']= settings['options'].getint('verbosity', 3)
-    
-    cc['database']['main']['dbname']= settings['main_database'].get('database_name', 'main')
-    cc['database']['main']['server']= settings['main_database'].get('server', 'localhost')
-    cc['database']['main']['port']= settings['main_database'].getint('port', 5432)
-
-    cc['database']['inventory']['dbname']= settings['inventory_database'].get('database_name', 'inventory')
-    cc['database']['inventory']['server']= settings['inventory_database'].get('server', 'localhost')
-    cc['database']['inventory']['port']= settings['inventory_database'].getint('port', 5432)
-    
-    cc['time']['format']['pretty']= settings['time_formats'].get('pretty', '%Y-%m-%d %H:%M:%S')
-    cc['time']['format']['file']= settings['time_formats'].get('file', '%Y%m%d_%H%M%S')
-    
-    
-    # Set the root path
-    
-    # If settings root_path is blank, use OS root
-    if settings['filepaths'].get('root_path', None) == '':
-        cc['file']['root_path']= os.path.abspath(os.sep)
-        
-    else: cc['file']['root_path']= settings['filepaths'].get('root_path', os.path.abspath(os.sep))
     
     # Parse and make the runtime folders
     cc['file']['run']['full_path']= os.path.join(cc['file']['root_path'], cc['file']['run']['folder'])    
@@ -192,19 +172,29 @@ def parse_config():
     
     # Populate credentials
     cc['credentials']= get_device_creds()
+    
+    _cred= get_database_cred()
+    cc['database']['main']['username']= _cred['username']
+    cc['database']['main']['password']= _cred['password']
+    cc['database']['inventory']['username']= _cred['username']
+    cc['database']['inventory']['password']= _cred['password']
+    
+
+def check_credentials():
     if (cc['credentials'] is None or
         len(cc['credentials']) == 0):
         raise IOError('There are no device credentials. Add one with -m') 
     
-    _cred= get_database_cred()
-    if _cred is None:
+    if (cc['database']['main']['username'] is None
+        or cc['database']['main']['password'] is None):
         raise IOError('There are no database credentials. Add one with -m') 
 
-    else:
-        cc['database']['main']['username']= _cred['username']
-        cc['database']['main']['password']= _cred['password']
-        cc['database']['inventory']['username']= _cred['username']
-        cc['database']['inventory']['password']= _cred['password']
-    
+
+
+
+
+
+
+
 
 

@@ -13,7 +13,6 @@ def setup_module(module):
 def _example(file):
     '''Returns the data from a given example file as a string'''
     
-    
     _file= os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
         'examples',
@@ -32,7 +31,7 @@ def test_disallows_bad_files():
         
         
 def test_can_open_csv():
-    _path= _example('ap_rogue_report.csv')
+    _path= _example('ip_subnet_mac.csv')
     
     print('Example path is [{}]'.format(_path))
     c= mac_audit._open_csv(_path)
@@ -41,9 +40,11 @@ def test_can_open_csv():
     assert len(c) > 2 
 
 
-def test_audit_runs_without_error():
-    _path= _example('ap_rogue_report.csv')
-    mac_audit.run_audit(_path)
+#===============================================================================
+# def test_audit_runs_without_error():
+#     _path= _example('ap_rogue_report.csv')
+#     mac_audit.run_audit(_path)
+#===============================================================================
 
 def _strip_mac(mac):
     return ''.join([x.upper() for x in mac if re.match(r'\w', x)])
