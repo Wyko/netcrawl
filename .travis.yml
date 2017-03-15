@@ -2,11 +2,7 @@ language: python
 python:
 #  - "2.6"
 #  - "2.7"
-  - "3.2"
-  - "3.3"
-  - "3.4"
   - "3.5"
-#  - "3.5-dev" # 3.5 development branch
   - "3.6"
   - "3.6-dev" # 3.6 development branch
   - "3.7-dev" # 3.7 development branch
@@ -14,14 +10,11 @@ python:
   
 matrix:
   include:
-  - python: '3.2'
-    install: pip install pytest
-    
-  - python: '3.3'
-    install: pip install pytest
-    
-  - python: '3.4'
-    install: pip install pytest
+  - python: 
+    - '3.2'
+    - '3.3'
+    - '3.4'
+    script: py.test
   
 
 # command to install dependencies
