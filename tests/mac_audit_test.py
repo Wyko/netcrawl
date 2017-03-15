@@ -24,6 +24,42 @@ def _example(file):
     return _file
 
 
+def _fake_csv_output():
+    #===========================================================================
+    # example= [
+    #     {'mac': 'dc:a8:b0:ae:29:5f', 'network_ip': '168.237.85.0/25'}
+    #     {'mac': '53:3a:83:c4:5c:1e', 'network_ip': '0.0.0.0/1'}]
+    #===========================================================================
+
+    # Generate a fake CSV output
+    from random import shuffle
+    fake= Factory.create()
+    x= []
+    previous_ips= []
+    for i in range (10):
+        
+        # Generate a unique IP to make sure we 
+        # have exactly 10 unique subnets 
+        while True:
+            ip= fake.ipv4(network= True)
+            if ip not in previous_ips:
+                previous_ips.append(ip)
+                break
+        
+        for i in range (10):
+            x.append({'mac': fake.mac_address(), 
+                     'network_ip': ip})
+        shuffle(x)
+    return x
+
+
+def test_sort_csv_by_subnet_returns_proper_number_of_results():
+    
+    result= mac_audit.sort_csv_by_subnet(_fake_csv_output())
+    
+    assert len(result)==10
+
+
 def test_disallows_bad_files():
     '''Don't permit bad filepaths'''
     with raises(IOError): 

@@ -53,10 +53,40 @@ def run_audit(csv_path):
     # Open the input CSV
     entries= _open_csv(csv_path)
     
-    for e in entries:
-        macs = device_db.macs_at_subnet(e['network_ip'])
+    csv_by_subnet(entries)
+    
+    macs = device_db.macs_at_subnet(e['network_ip'])
 
     
+def sort_csv_by_subnet(csv_rows):
+    '''Takes a list of dicts with 'network_ip' and 'mac' 
+    as keys, then produces a dict of lists containing 
+    subnets and the mac addresses associated with them'''
+    #===========================================================================
+    # example= {
+    #     '10.1.120.0/255.255.255.0': [
+    #         '52:18:67:1f:34:80'
+    #         '71:ed:11:af:bc:02'
+    #         '3c:ca:53:9c:c9:71'
+    #         ],
+    #     '10.2.0.0/255.255.0.0': [
+    #         'df:90:31:22:0e:87'
+    #         '9f:7f:4a:d2:61:fd'
+    #         '64:62:0e:dc:26:d4'
+    #         ]
+    #     }
+    #===========================================================================
+    
+    subnets={}
+    for row in csv_rows:
+        if row['network_ip'] not in subnets:
+            subnets[row['network_ip']] = []
+        
+        subnets[row['network_ip']].append(row['mac'])
+                
+    return subnets
+
+
 def evaluate_mac(mac1, mac2):
     
     if any([mac1 is None,
