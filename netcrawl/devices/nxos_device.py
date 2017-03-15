@@ -31,6 +31,7 @@ class NxosDevice(CiscoDevice):
 
     
     def _get_interfaces(self):
+        '''Tries the two ways to parse NXOS'''
         proc = 'NxosDevice._get_interfaces'
         
         try: self.get_interfaces_xml()
