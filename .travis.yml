@@ -15,7 +15,9 @@ install:
   - pip install coveralls
   
 # command to run tests
-script: pytest
+script: 
+    - coverage run --source=netcrawl setup.py test
+    - pytest
 
 #sudo: required
 
