@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/Wyko/netcrawl.svg?branch=development)](https://travis-ci.org/Wyko/netcrawl)
+[![Build Status](https://travis-ci.org/Wyko/netcrawl.svg?branch=development)](https://travis-ci.org/Wyko/netcrawl) [![Coverage Status](https://coveralls.io/repos/github/Wyko/netcrawl/badge.svg?branch=development)](https://coveralls.io/github/Wyko/netcrawl?branch=development)
 
 # netcrawl
 
