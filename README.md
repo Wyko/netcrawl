@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/Wyko/netcrawl.svg?branch=development)](https://travis-ci.org/Wyko/netcrawl)
+[![Build Status](https://travis-ci.org/Wyko/netcrawl.svg?branch=master)](https://travis-ci.org/Wyko/netcrawl)
 
 # netcrawl
 
