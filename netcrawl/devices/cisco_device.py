@@ -12,9 +12,18 @@ from ..util import parse_ip
 from ..wylog import log, logging
 from .base import NetworkDevice, Interface
 
-
 class CiscoDevice(NetworkDevice):
+    
+    def __init__(self, *args, **kwargs):
+        NetworkDevice.__init__(self, *args, **kwargs)
+
+        self.reg_serial= re.compile(r'''
+            ^Name.*?["](.+?)["][\s\S]*?
+            Desc.*?["](.+?)["][\s\S]*?
+            SN:[ ]?(\w+)''',
+            (re.X | re.M | re.I))
         
+    
     def _parse_hostname(self, attempts=5):
         proc = 'CiscoDevice._parse_hostname'
         log('Parsing hostname', proc=proc, v=logging.I)
@@ -36,9 +45,7 @@ class CiscoDevice(NetworkDevice):
             try:
                 output = self.connection.find_prompt()
             except ValueError:
-                self.connection.global_delay_factor += config.DELAY_INCREASE
-                log('Failed to find the prompt during attempt %s. Increasing delay to %s'  
-                    % (str(i + 1), self.connection.global_delay_factor),
+                log('Failed to find the prompt during attempt {}'.format(str(i + 1)),
                     proc=proc, v=logging.A)
                 sleep(2 + i)
                 continue
@@ -55,35 +62,46 @@ class CiscoDevice(NetworkDevice):
         raise ValueError('_parse_hostname failed. No hostname found.')
 
     
-    def _get_serials(self):
-        proc = 'CiscoDevice._get_serials'
-        
-        log('Starting to get serials', proc=proc, v=logging.I)
+    
+    def _poll_for_serials(self):
+        proc = 'CiscoDevice._poll_for_serials'
+        log('Starting: Polling for serials', proc=proc, v=logging.I)
         
         # Poll the device for the serials
-        raw_output = self._attempt('show inventory',
-                     proc=proc,
-                     fn_check=lambda x: bool(re.search(r'''
-                                        ^Name.*?["](.+?)["][\s\S]*?
-                                        Desc.*?["](.+?)["][\s\S]*?
-                                        SN:[ ]?(\w+)''',
-                                        x, re.X | re.M | re.I)))
+        return self._attempt('show inventory',
+            proc=proc,
+            fn_check=lambda x: bool(self.reg_serial.search(x)))
+    
+    
+    def _parse_serials(self, raw_input):
+        proc = 'CiscoDevice._parse_serials'
+        log('Starting: Parsing serials', proc=proc, v=logging.I)
         
-        # Parse each serial number
-        output = re.findall(r'''
-                            ^Name.*?["](.+?)["][\s\S]*?
-                            Desc.*?["](.+?)["][\s\S]*?
-                            SN:[ ]?(\w+)''',
-                            raw_output, re.X | re.M | re.I)
-        
+        # Parse the serials
+        output= self.reg_serial.findall(raw_input)
+    
         # Raise error if no results were produced.
         if not (output and output[0]):
             log('Failed to get serials. Re.Findall produced no results. ' + 
-                'Raw_output[:20] was: {}'.format(raw_output[:20]),
+                'Raw_output[:20] was: {}'.format(raw_input[:20]),
                 ip=self.connection.ip, proc=proc, v=logging.A)
             raise ValueError(proc + ': Failed to get serials. Re.Findall produced no results ' + 
-                'Raw_output was: {}'''.format(raw_output))
+                'Raw_output was: {}'''.format(raw_input))
                 
+        else: return output
+    
+    
+    def get_serials(self):
+        proc = 'CiscoDevice.get_serials'
+        
+        log('Starting to get serials', proc=proc, v=logging.I)
+        
+        # Get the serials
+        raw_output= self._poll_for_serials()
+        
+        # Parse each serial number
+        output = self._parse_serials(raw_output)
+        
         # Add the found serials to the parent device        
         serials = []
         for i in output:

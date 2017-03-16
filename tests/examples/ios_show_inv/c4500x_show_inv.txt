@@ -1,0 +1,26 @@
+str: NAME: "Switch System", DESCR: "Cisco Systems, Inc. WS-C4500X-32 2 slot switch "
+PID:                   , VID:      , SN: JAE18270S2X
+
+NAME: "Supervisor(slot 1)", DESCR: "4500X-32 10GE (SFP+)"
+PID: WS-C4500X-32      , VID: V04  , SN: JAE18272G2X
+
+NAME: "TenGigabitEthernet1/1", DESCR: "1000BaseLH"
+PID: GLC-LH-SMD        , VID: V01  , SN: FNS18277TW6
+
+NAME: "TenGigabitEthernet1/2", DESCR: "1000BaseLH"
+PID: GLC-LH-SMD        , VID: V01  , SN: FNS182738LE
+
+NAME: "TenGigabitEthernet1/3", DESCR: "1000BaseLH"
+PID: GLC-LH-SMD        , VID: V01  , SN: FNS18252AUT
+
+NAME: "TenGigabitEthernet1/4", DESCR: "1000BaseLH"
+PID: Unspecified       , VID:      , SN: FNS11400PYZ
+
+NAME: "TenGigabitEthernet1/5", DESCR: "1000BaseSX"
+PID: Unspecified       , VID:      , SN: AGS1035513V
+
+NAME: "TenGigabitEthernet1/6", DESCR: "1000BaseLH"
+PID: GLC-LH-SMD        , VID: V01  , SN: FNS18272DW2
+
+NAME: "TenGigabitEthernet1/7", DESCR: "1000BaseLH"
+PID: GLC-LH-SMD        , VID: V01  , SN: FNS18274WCR

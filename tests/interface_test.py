@@ -5,55 +5,12 @@ Created on Mar 13, 2017
 '''
 
 from faker import Factory
-from faker.providers import internet, BaseProvider
+
 import pytest
 
 from netcrawl.devices.base import Interface
+from tests.helpers import Cisco
 
-
-# first, import a similar Provider or use the default one
-# create new provider class
-class Cisco(BaseProvider):
-    
-    interface_types= ['port-channel',
-                    'Multilink',
-                    'TenGigabitEthernet',
-                    'Ethernet',
-                    'Cellular',
-                    'loopback',
-                    'Tunnel',
-                    'FastEthernet',
-                    'Vlan',
-                    'Port-channel',
-                    'POS',
-                    'Loopback',
-                    'Embedded-Service-Engine',
-                    'Service-Engine',
-                    'Serial',
-                    'GigabitEthernet',
-                    'Async',
-                    'ISM',
-                    'mgmt',
-                    'MFR',]
-    
-    def interfaceType(self):
-        return self.random_element(self.interface_types)
-    
-    
-    def interfaceNumber(self):
-        '''Generates a fake interface number'''
-        
-        name= str(self.random_digit())
-        
-        for x in range(self.random_int(0, 3)):
-            name += '/' + str(self.random_digit())
-        
-        # Add a sub interface    
-        if self.random_digit() < 3:
-            name+= '.' + str(self.random_int(1, 999))
-            
-        return name
-    
 
 def _new_interface():
 

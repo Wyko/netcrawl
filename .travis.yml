@@ -12,6 +12,7 @@ python:
 install:
   - pip install .
   - pip install -r requirements.txt
+  - pip install coveralls
   
 # command to run tests
 script: pytest
@@ -21,3 +22,14 @@ script: pytest
 os:
   - linux
 #  - osx
+
+matrix:
+  allow_failures:
+    - python:
+      - "3.6-dev" # 3.6 development branch
+      - "3.7-dev" # 3.7 development branch
+      - "nightly" # currently points to 3.7-dev
+      - "3.5"
+      
+after_success:
+  coveralls

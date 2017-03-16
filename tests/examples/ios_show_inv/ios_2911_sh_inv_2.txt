@@ -1,0 +1,18 @@
+hostname#sh inv
+NAME: "CISCO2911/K9 chassis", DESCR: "CISCO2911/K9 chassis"
+PID: CISCO2911/K9      , VID: V06 , SN: FTX1615ALD9
+
+NAME: "VWIC2-2MFT-T1/E1 - 2-Port RJ-48 Multiflex Trunk - T1/E1 on Slot 0 SubSlot 0", DESCR: "VWIC2-2MFT-T1/E1 - 2-Port RJ-48 Multiflex Trunk - T1/E1"
+PID: VWIC2-2MFT-T1/E1  , VID: V01 , SN: FOC16345YX3
+
+NAME: "2nd generation four port FXO voice interface daughtercard on Slot 0 SubSlot 1", DESCR: "2nd generation four port FXO voice interface daughtercard"
+PID: VIC2-4FXO         , VID: V04 , SN: FOC16280Q85
+
+NAME: "3rd generation four port FXS DID voice interface daughtercard on Slot 0 SubSlot 2", DESCR: "3rd generation four port FXS DID voice interface daughtercard"
+PID: VIC3-4FXS/DID     , VID: V03 , SN: FOC16324GU1
+
+NAME: "PVDM3 DSP DIMM with 64 Channels on Slot 0 SubSlot 4", DESCR: "PVDM3 DSP DIMM with 64 Channels"
+PID: PVDM3-64          , VID: V01 , SN: FOC16348ZR6
+
+NAME: "C2911 AC Power Supply", DESCR: "C2911 AC Power Supply"
+PID: PWR-2911-AC       , VID: V04 , SN: AZS162803GC

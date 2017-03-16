@@ -10,11 +10,7 @@ from .wylog import log, logf, logging
 retry_args = {'stop_max_delay': 60000,  # Stop after 60 seconds
              'wait_exponential_multiplier': 100,  # Exponential backoff
              'wait_exponential_max': 10000,
-#             'retry_on_exception': ( # Only retry on this exception
-#                 lambda x: isinstance(x, sqlite3.OperationalError)
-#                 )
              }
-
 
             
 class sql_logger():
@@ -604,14 +600,24 @@ class device_db(sql_database):
         return sql_database.ip_exists(self, ip, 'interfaces')
     
     
-    def macs_at_subnet(self, subnet):
+    def device_subnets(self):
         with self.conn, self.conn.cursor() as cur:
             cur.execute('''
-                SELECT mac_id, mac_address, network_ip
+                SELECT distinct network_ip, interfaces.device_id
+                FROM interfaces
+                JOIN devices on interfaces.device_id=devices.device_id
+                WHERE network_ip is not NULL;
+                ''')
+            return cur.fetchall()
+        
+    def device_macs(self, device_id):
+        with self.conn, self.conn.cursor() as cur:
+            cur.execute('''
+                SELECT mac_address
                 FROM mac
-                JOIN interfaces ON mac.interface_id=interfaces.interface_id
-                WHERE network_ip = %s
-                ''', (subnet, ) )
+                JOIN interfaces on mac.interface_id=interfaces.interface_id
+                WHERE interfaces.device_id = %s;
+                ''', (device_id, ))
             return cur.fetchall()
     
     def unique_name_exists(self, name):

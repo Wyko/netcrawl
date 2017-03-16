@@ -5,23 +5,11 @@ from pytest import raises
 
 from netcrawl.tools import mac_audit
 from netcrawl import config
+from tests import helpers
 import csv
 
 def setup_module(module):
     config.parse_config()
-
-def _example(file):
-    '''Returns the data from a given example file as a string'''
-    
-    _file= os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        'examples',
-        file)
-    
-    assert os.path.isfile(_file), '[{}] is not a valid file'.format(
-        _file)  
-    
-    return _file
 
 
 def _fake_csv_output():
@@ -53,6 +41,7 @@ def _fake_csv_output():
     return x
 
 
+
 def test_sort_csv_by_subnet_returns_proper_number_of_results():
     
     result= mac_audit.sort_csv_by_subnet(_fake_csv_output())
@@ -67,7 +56,7 @@ def test_disallows_bad_files():
         
         
 def test_can_open_csv():
-    _path= _example('ip_subnet_mac.csv')
+    _path= helpers.example('ip_subnet_mac.csv')
     
     print('Example path is [{}]'.format(_path))
     c= mac_audit._open_csv(_path)
@@ -76,11 +65,10 @@ def test_can_open_csv():
     assert len(c) > 2 
 
 
-#===============================================================================
-# def test_audit_runs_without_error():
-#     _path= _example('ap_rogue_report.csv')
-#     mac_audit.run_audit(_path)
-#===============================================================================
+def test_audit_runs_without_error(capsys):
+    _path= helpers.example('ip_subnet_mac.csv')
+#     with capsys.disabled():
+    mac_audit.run_audit(_path)
 
 def _strip_mac(mac):
     return ''.join([x.upper() for x in mac if re.match(r'\w', x)])
@@ -104,22 +92,19 @@ def test_bad_mac_doesnt_evaluate():
     ) == 0
 
 
-def test_perfect_mac_match_scores_100():
+def test_eval_returns_valid_response_100():
     fake= Factory().create()
-    x= _strip_mac(fake.mac_address())
+    x= fake.mac_address()
                
     assert mac_audit.evaluate_mac(x, x) == 100
 
-# def test_eval_returns_valid_response():
-#     response= mac_audit.evaluate_mac('001422012345')
-#     
-#     assert isinstance(response, dict), 'Response was [{}]'.format(
-#         type(response))
-#     
-#     # Check to make sure a valid confidence was returned
-#     assert all (k in response for k in ('matched',
-#                                         'confidence',
-#                                         'best_mac',
-#                                         'mac_id',)
-#                 ), 'No valid response found in [{}]'.format(response)
-#     
+
+def test_eval_returns_valid_response_50():
+    response= mac_audit.evaluate_mac('001422.*123C45', 
+                                     '001422@6345D6')
+     
+    assert isinstance(response, int), 'Response was [{}]'.format(
+        type(response))
+     
+    assert response == 50
+     
