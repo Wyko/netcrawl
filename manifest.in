@@ -1,2 +1,3 @@
 include README.md
 include settings.ini
+recursive-include tests/
