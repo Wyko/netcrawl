@@ -12,12 +12,11 @@ python:
 install:
   - pip install .
   - pip install -r requirements.txt
-  - pip install coveralls
+  - pip install pytest-cov
   
 # command to run tests
 script: 
-    - coverage run --source=netcrawl setup.py test
-    - pytest
+    - pytest --cov=netcrawl tests/
 
 #sudo: required
 
