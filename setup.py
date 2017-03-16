@@ -41,7 +41,7 @@ setup(
               'netcrawl.wylog',
               'tests'
 			 ],
-    data_files=[('tests', '*')],
+#     data_files=[('tests', '*')],
     long_description= read('README.md'),
     classifiers=[
         "Development Status :: 3 - Alpha",
