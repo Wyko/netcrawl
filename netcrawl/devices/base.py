@@ -85,14 +85,12 @@ class NetworkDevice():
         
         
     def __str__(self):
-        try: serial= ', '.join([x + ': ' + y  for x, y in self.first_serial().items()])
-        except: serial= 'None'
         
         return '\n'.join([
             'Device Name:       ' + str(self.device_name),
             'Unique Name:       ' + str(self.unique_name()),
             'Management IP:     ' + str(self.ip),
-            'First Serial:      ' + serial,
+            'First Serial:      ' + self.first_serial_str(),
             'Serial Count:      ' + str(len(self.serial_numbers)),
             'Dynamic MAC Count: ' + str(len(self.mac_address_table)),
             'Interface Count:   ' + str(len(self.interfaces)),
@@ -254,9 +252,14 @@ class NetworkDevice():
         return '_'.join(output).upper()
         
     
-    def first_serial(self):
-        if len(self.serial_numbers) == 0: return None
-        else: return self.serial_numbers[0]['serialnum']
+    def first_serial_str(self):
+        if len(self.serial_numbers) == 0: 
+            return None
+        
+        else: 
+            return ', '.join([x + ': ' + y  
+                                for x, y 
+                                in self.serial_numbers[0]['serialnum']])
           
     
     def process_device(self):
@@ -303,7 +306,7 @@ class NetworkDevice():
         # These are optional, and only leave a log message when they 
         # fail (unless SUPPRESS_EXCEPTION has been set False)
         for fn in (
-            self._get_serials,
+            self.get_serials,
             self._get_other_ips,
             self._get_cdp_neighbors,
             self._get_mac_address_table,
@@ -332,8 +335,8 @@ class NetworkDevice():
             i.get_network_ip()
     
     
-    def _get_serials(self):
-        self.alert('No inherited method replaced this method.', 'base_device._get_serials')
+    def get_serials(self):
+        self.alert('No inherited method replaced this method.', 'base_device.get_serials')
         
     def _get_config(self):
         self.alert('No inherited method replaced this method.', 'base_device._get_config')

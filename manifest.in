@@ -1,2 +1,5 @@
 include README.md
 include settings.ini
+recursive-include tests/examples/*
+recursive-include tests/examples/ios_show_inv/*
+recursive-include tests/examples/nxos_show_inv/*

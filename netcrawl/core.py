@@ -293,8 +293,9 @@ def single_run(target, netmiko_platform= 'unknown'):
     
     try: device = create_instantiated_device(ip=target, netmiko_platform=netmiko_platform)
     except Exception as e: 
-        log('Connection to {} failed: {}'.format(
-            device.ip, str(e)), proc=proc, v= logging.C)
+        log('Connection to [{}] failed: {}'.format(
+            target, str(e)), proc=proc, v= logging.C)
+        raise
     
     
     # Process the device

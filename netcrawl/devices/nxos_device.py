@@ -13,9 +13,9 @@ from ..wylog import log, logging
 class NxosDevice(CiscoDevice):
     
     
-    def _get_serials(self):
+    def get_serials(self):
         '''Returns serials based on XML output'''
-        proc = 'NxosDevice._get_serials'
+        proc = 'NxosDevice.get_serials'
         
         log('Starting to get serials', proc=proc, v=logging.I)
         
@@ -31,6 +31,7 @@ class NxosDevice(CiscoDevice):
 
     
     def _get_interfaces(self):
+        '''Tries the two ways to parse NXOS'''
         proc = 'NxosDevice._get_interfaces'
         
         try: self.get_interfaces_xml()

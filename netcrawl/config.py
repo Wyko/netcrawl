@@ -39,7 +39,7 @@ cc = {
     'file': {
         
 #         'root_path': os.path.abspath(os.sep),
-        'root_path': os.path.join(os.path.expanduser('~'), 'netcrawl'),
+        'root_path': os.path.join(os.path.expanduser('~')),
         
         'log': {
             'name': 'log.txt',
@@ -134,6 +134,9 @@ def creds():
 
 def log_path():
     return cc['file']['log']['full_path']
+
+def root_path():
+    return cc['file']['root_path']
 
 def device_path():
     return cc['file']['devices']['full_path']

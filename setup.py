@@ -25,6 +25,7 @@ tests_require = [
     ]
 
 setup(
+    include_package_data=True,
     name = "netcrawl",
     version = "0.3.1-beta",
     author = "Wyko ter Haar",
@@ -40,6 +41,7 @@ setup(
               'netcrawl.wylog',
               'tests'
 			 ],
+      
     long_description= read('README.md'),
     classifiers=[
         "Development Status :: 3 - Alpha",

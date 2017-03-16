@@ -1,0 +1,3 @@
+hostname#sh inv
+NAME: "1", DESCR: "WS-C2960-48PST-S"
+PID: WS-C2960-48PST-S  , VID: V05  , SN: FCQ1517Y4WP
