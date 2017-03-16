@@ -103,3 +103,4 @@ ENV/
 # Rope project settings
 .ropeproject
 /README.md
+/~/
