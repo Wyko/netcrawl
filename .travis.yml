@@ -8,11 +8,15 @@ python:
   - "nightly" # currently points to 3.7-dev
   - "3.6"
   
+services:
+  - postgresql
+  
 # command to install dependencies
 install:
   - pip install .
+  - pip install -U keyrings.alt
+  - pip install pytest-cov coveralls
   - pip install -r requirements.txt
-  - pip install pytest-cov
   
 # command to run tests
 script: 

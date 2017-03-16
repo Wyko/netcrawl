@@ -12,15 +12,16 @@ from .. import config
 from ..wylog import logging, log
 
 
-def _get_fernet_key():
+def _get_fernet_key(app_name= 'netcrawl',
+                    username= 'netcrawl'):
     proc= 'config._get_fernet_key'
     
     # Retrieve the encryption key from storage or generate one
-    key= keyring.get_password('netcrawl', 'netcrawl')
+    key= keyring.get_password(app_name, username)
     if key is None:
         log('Creating encryption key', v= logging.N, proc= proc)
         key = Fernet.generate_key()
-        keyring.set_password('netcrawl', 'netcrawl', str(key, encoding='utf-8'))
+        keyring.set_password(app_name, username, str(key, encoding='utf-8'))
     else:
         key= bytes(key, encoding='utf-8')
         
