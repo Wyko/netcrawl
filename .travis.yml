@@ -8,6 +8,9 @@ python:
   - "nightly" # currently points to 3.7-dev
   - "3.6"
   
+services:
+  - postgresql
+  
 # command to install dependencies
 install:
   - pip install .
