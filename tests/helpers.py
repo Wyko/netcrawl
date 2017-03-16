@@ -36,6 +36,9 @@ def get_example_dir(dir_name):
             with open(os.path.join(directory, filename), 'r') as infile:
                 yield infile.read() 
             
+
+def populate_network_device(nd):
+    pass
             
             
 # first, import a similar Provider or use the default one
