@@ -32,8 +32,9 @@ def get_example_dir(dir_name):
             dir_name)
     
     for filename in os.listdir(directory):
-        with open(os.path.join(directory, filename), 'r') as infile:
-            yield infile.read() 
+        if filename.endswith('.txt'):
+            with open(os.path.join(directory, filename), 'r') as infile:
+                yield infile.read() 
             
             
             
