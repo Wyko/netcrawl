@@ -14,7 +14,7 @@ services:
 # command to install dependencies
 install:
   - pip install .
-  - pip install -U dbus-python
+  - pip install -U keyrings.alt
   - pip install pytest-cov coveralls
   - pip install -r requirements.txt
   
