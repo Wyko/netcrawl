@@ -14,7 +14,7 @@ services:
 # command to install dependencies
 install:
   - pip install .
-  - pip install secretstorage dbus-python
+  - pip install -U secretstorage dbus-python
   - pip install pytest-cov coveralls
   - pip install -r requirements.txt
   
