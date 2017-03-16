@@ -25,6 +25,7 @@ tests_require = [
     ]
 
 setup(
+    include_package_data=True,
     name = "netcrawl",
     version = "0.3.1-beta",
     author = "Wyko ter Haar",
