@@ -40,7 +40,7 @@ def run_find_unknown_switches():
         ORDER BY devices.device_name, macs DESC;
         ''')
     
-    t = PrettyTable(['Device Name', 'Device ID', 'Interface', 'MAC Count', 'Manufacturer'])
+    t = PrettyTable(['Device Name', 'Device ID', 'Interface', 'MAC Count'])
     t.align = 'l'
     for r in results: t.add_row(r)
     print(t)
