@@ -23,6 +23,7 @@ import argparse
 import re
 import sys
 import io
+import os
 
 try:
     from urllib2 import urlopen
@@ -59,7 +60,10 @@ class MacParser(object):
     """
     MANUF_URL = "https://code.wireshark.org/review/gitweb?p=wireshark.git;a=blob_plain;f=manuf"
 
-    def  __init__(self, manuf_name="manuf.txt", update=False):
+    def  __init__(self, 
+                  manuf_name=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'manuf'), 
+                  update=False):
+        
         self._manuf_name = manuf_name
         if update:
             self.update()

@@ -10,7 +10,7 @@ import csv
 
 def setup_module(module):
     config.parse_config()
-    config.set_database_cred('postgres', None)
+#     config.set_database_cred('postgres', None)
 
 
 def _fake_csv_output():

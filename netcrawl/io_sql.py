@@ -54,9 +54,9 @@ class sql_logger():
 class sql_database():
     def __init__(self, dbname, **kwargs):
         # Create the tables in each database, overwriting if needed
-        clean = kwargs.get('clean', False)
+        self.clean = kwargs.get('clean', False)
         self.create_database(dbname)
-        self.create_table(drop_tables=clean)
+        
     
     """
     def delete_database(self, db_name, cur= None):
@@ -183,10 +183,10 @@ class main_db(sql_database):
         
         self.DB_NAME = 'main'
         
-        self.conn = psycopg2.connect(**config.main_args())
-        
         sql_database.__init__(self, self.DB_NAME, **kwargs)
         
+        self.conn = psycopg2.connect(**config.main_args())
+        self.create_table(drop_tables=self.clean)
         self.ignore_visited = kwargs.get('ignore_visited', True)
         
         with self.conn, self.conn.cursor() as cur, sql_logger(proc):
@@ -587,9 +587,12 @@ class device_db(sql_database):
         proc = 'device_db.__init__'
         
         self.DB_NAME = 'inventory'
-        sql_database.__init__(self,self.DB_NAME, **kwargs)
         
+        sql_database.__init__(self,self.DB_NAME, **kwargs)
+
         self.conn = psycopg2.connect(**config.inventory_args())
+        self.create_table(drop_tables=self.clean)
+        
     
     def __len__(self):
         'Returns the number of devices in the database'
