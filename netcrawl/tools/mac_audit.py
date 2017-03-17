@@ -67,6 +67,7 @@ def run_audit(csv_path):
     device_db = io_sql.device_db()
 
     results=[]
+    mp = MacParser(update=True)
     
     # Iterate over each subnet where a rogue was detected
     for subnet in sorted(csv_subnets):
@@ -84,6 +85,7 @@ def run_audit(csv_path):
                     csv_row= dict(csv_row)
                     csv_row['confidence'] = x
                     csv_row['wired_mac'] = mac
+                    csv_row['Manufacturer'] = mp.search(mac)
 
                     results.append(csv_row)
                         
@@ -96,15 +98,22 @@ def run_audit(csv_path):
 
 
 def write_report(rows):
-    ddb= device_db()
-    mp = MacParser(update=True)
+    from datetime import datetime
     
-    #===========================================================================
-    # try: mp.update()
-    # except: pass
-    #===========================================================================
+    ddb= device_db()
     
     with open(os.path.join(config.run_path(), 'mac_audit_report.txt'), 'w') as outfile:
+        outfile.write(textwrap.dedent('''\
+            Title:  Rogue Device Report
+            Time:   {}
+            
+            Note 1: In the neighbor table for each match, the interface with no 
+                    neighbor or a neighbor which is an obvious non-network 
+                    device (such as a phone) is the most likely interface to be 
+                    directly connected to the matched MAC.
+            
+            '''.format(datetime.now().strftime(config.pretty_time()))))
+        
         for x in rows:
             # Get the neighbors
             located= ddb.locate_mac(x['wired_mac'])
@@ -113,22 +122,23 @@ def write_report(rows):
             result+= '{:12}: {}\n'.format('Matched Mac', x.pop('mac'))
             result+= '{:12}: {}\n'.format('Wired Mac', x.get('wired_mac'))
             result+= '{:12}: {}\n'.format('Confidence', x.pop('confidence'))
-            result+= '{:12}: {}\n'.format('Manufacturer', mp.search(x.pop('wired_mac')))
+            result+= '{:12}: {}\n'.format('Manufacturer', x.pop('Manufacturer'))
 
             result+= '\n'.join(['{:12}: {}'.format(k, v) for k, v in sorted(x.items())])
-            result+= '\n\n{:^30} | {:^30} | {:^30} |\n'.format('Device', 'Interface', 'Neighbor')
+            result+= '\n\n{:^97}'.format('-- Where this MAC was seen --')
+            result+= '\n{:^30} | {:^30} | {:^30} |\n'.format('Device', 'Interface', 'Neighbor')
             
             for loc in located:
                 result+= '{:30} | {:30} | {:30} |\n'.format(str(loc[0]),
-                                                                    str(loc[1]),
-                                                                    str(loc[2]))
+                                                            str(loc[1]),
+                                                            str(loc[2]))
             result+= '\n'
                 
             outfile.write(result)
     
                         
 def write_csv(rows):
-    with open(os.path.join(config.run_path(), 'mac_audit.csv'), 'w') as outfile:
+    with open(os.path.join(config.run_path(), 'mac_audit.csv'), 'w', newline='') as outfile:
         
         keys= [k for k, v in rows[0].items()]
                   

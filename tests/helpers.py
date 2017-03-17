@@ -37,10 +37,7 @@ def get_example_dir(dir_name):
                 yield infile.read() 
             
 
-def populate_network_device(nd):
-    pass
-            
-            
+
 # first, import a similar Provider or use the default one
 # create new provider class
 class Cisco(BaseProvider):

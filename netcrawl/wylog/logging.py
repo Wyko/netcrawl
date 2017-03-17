@@ -74,8 +74,6 @@ def log(msg, **kwargs):
     
     msg= str(msg)
     
-    time_format = '%Y-%m-%d %H:%M:%S'
-
     # Set the prefix for the log entry
     if v >=3: info_str = '#' + str(v)
     if v ==2: info_str = '? '
@@ -85,7 +83,7 @@ def log(msg, **kwargs):
     
     try:
         output = '{_proc:20}, {_msg}, {_time}, {_ip:15}, {_error}'.format(
-                    _time= datetime.now().strftime(time_format),
+                    _time= datetime.now().strftime(config.pretty_time()),
                     _proc= str(proc),
                     _msg = msg.replace(',', ';'),
                     _ip = str(ip),

@@ -586,11 +586,10 @@ class device_db(sql_database):
     def __init__(self, **kwargs):
         proc = 'device_db.__init__'
         
-        self.conn = psycopg2.connect(**config.inventory_args())
-        
         self.DB_NAME = 'inventory'
         sql_database.__init__(self,self.DB_NAME, **kwargs)
         
+        self.conn = psycopg2.connect(**config.inventory_args())
     
     def __len__(self):
         'Returns the number of devices in the database'
