@@ -256,11 +256,11 @@ class NetworkDevice():
         if len(self.serial_numbers) == 0: 
             return None
         
-        else: 
-            return ', '.join([x + ': ' + y  
-                                for x, y 
-                                in self.serial_numbers[0]['serialnum']])
-          
+        else: return ', '.join(
+                        ['{}: [{}]'.format(x.title(), y)  
+                        for x, y 
+                        in self.serial_numbers[0].items()])
+      
     
     def process_device(self):
         '''Main method which fully populates the network_device'''

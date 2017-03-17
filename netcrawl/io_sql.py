@@ -101,6 +101,15 @@ class sql_database():
         with self.conn, self.conn.cursor() as cur:
             cur.execute(*args)
             return cur.fetchall()
+        
+    def execute_sql_gen(self, *args):
+        with self.conn, self.conn.cursor() as cur:
+            cur.execute(*args)
+            
+            # Iterate over results and yield them in a generator
+            for result in cur:
+                if result is None: return True
+                else: yield result
             
     @logf
     def create_database(self, new_db):

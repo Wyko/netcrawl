@@ -107,7 +107,7 @@ def write_report(rows):
             Title:  Rogue Device Report
             Time:   {}
             
-            Note 1: In the neighbor table for each match, the interface with no 
+            Note: In the neighbor table for each match, the interface with no 
                     neighbor or a neighbor which is an obvious non-network 
                     device (such as a phone) is the most likely interface to be 
                     directly connected to the matched MAC.
@@ -120,7 +120,7 @@ def write_report(rows):
             result= '-'*50 + '\n\n'
             
             result+= '{:12}: {}\n'.format('Matched Mac', x.pop('mac'))
-            result+= '{:12}: {}\n'.format('Wired Mac', x.get('wired_mac'))
+            result+= '{:12}: {}\n'.format('Wired Mac', x.pop('wired_mac'))
             result+= '{:12}: {}\n'.format('Confidence', x.pop('confidence'))
             result+= '{:12}: {}\n'.format('Manufacturer', x.pop('Manufacturer'))
 
@@ -195,7 +195,15 @@ def evaluate_mac(mac1, mac2):
         
      
 if __name__ == '__main__':
-    run_audit(r"E:\rogue_joined.csv")
+    import argparse
+    from netcrawl import config
+    config.parse_config()
+    
+    parser = argparse.ArgumentParser(description='Perform an audit of MACs on the network')
+    parser.add_argument('csv', help='A csv file to audit.')
+    args = parser.parse_args()
+    
+    run_audit(args.csv)
         
         
         
