@@ -102,7 +102,8 @@ def write_report(rows):
     
     ddb= device_db()
     
-    with open(os.path.join(config.run_path(), 'mac_audit_report.txt'), 'w') as outfile:
+    path= os.path.join(config.run_path(), 'mac_audit_report.txt')
+    with open(path, 'w') as outfile:
         outfile.write(textwrap.dedent('''\
             Title:  Rogue Device Report
             Time:   {}
@@ -135,10 +136,11 @@ def write_report(rows):
             result+= '\n'
                 
             outfile.write(result)
-    
+    print('Finished writing report to [{}]'.format(path))
                         
 def write_csv(rows):
-    with open(os.path.join(config.run_path(), 'mac_audit.csv'), 'w', newline='') as outfile:
+    path= os.path.join(config.run_path(), 'mac_audit.csv')
+    with open(path, 'w', newline='') as outfile:
         
         keys= [k for k, v in rows[0].items()]
                   
@@ -146,7 +148,7 @@ def write_csv(rows):
         writer.writeheader()
         for x in rows:
             writer.writerow(x)
-    
+    print('Finished writing CSV to [{}]'.format(path))
     
 def sort_csv_by_subnet(csv_rows):
     '''Takes a list of dicts with 'network_ip' and 'mac' 
