@@ -600,15 +600,53 @@ class device_db(sql_database):
         return sql_database.ip_exists(self, ip, 'interfaces')
     
     
-    def device_subnets(self):
+    def locate_mac(self, mac):
         with self.conn, self.conn.cursor() as cur:
             cur.execute('''
-                SELECT distinct network_ip, interfaces.device_id
+                SELECT distinct devices.device_name as device, interface_name as interface, neighbors.device_name as neighbor
+                FROM mac
+                JOIN devices ON mac.device_id=devices.device_id
+                JOIN interfaces on mac.interface_id=interfaces.interface_id
+                LEFT JOIN neighbors on mac.interface_id=neighbors.interface_id
+                WHERE mac_address = %s;
+                ''', (mac, ))
+            return cur.fetchall()
+    
+    
+    def devices_on_subnet(self, subnet):
+        with self.conn, self.conn.cursor() as cur:
+            cur.execute('''
+                SELECT distinct interfaces.device_id
                 FROM interfaces
                 JOIN devices on interfaces.device_id=devices.device_id
-                WHERE network_ip is not NULL;
-                ''')
-            return cur.fetchall()
+                WHERE network_ip is %s;
+                ''', (subnet, ))
+            results= cur.fetchall()
+        
+        # Return a nicely formatted list of device ID's 
+        results= [x[0] for x in results]
+        return sorted(set(results))
+    
+    def macs_on_subnet(self, subnet):
+        with self.conn, self.conn.cursor() as cur:
+            cur.execute('''
+                SELECT distinct mac_address
+                FROM (SELECT distinct interface_id
+                      FROM (SELECT distinct device_id
+                            FROM interfaces
+                            WHERE network_ip = %s) as foo
+                      JOIN interfaces ON interfaces.device_id=foo.device_id) as bar
+                JOIN mac on mac.interface_id = bar.interface_id;
+                ''', (subnet, ))
+            
+            # Create a generator over the macs so that we don't 
+            # get overwhelmed
+            for mac in cur:
+                if mac is None: return True
+                
+                else: yield mac[0]
+
+        
         
     def device_macs(self, device_id):
         with self.conn, self.conn.cursor() as cur:

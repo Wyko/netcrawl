@@ -17,7 +17,7 @@ cc = {
     'debug': False,
     
     # Raise errors encountered during device processing
-    'raise_exceptions': True,
+    'raise_exceptions': False,
     
     'working_dir': None,
     
