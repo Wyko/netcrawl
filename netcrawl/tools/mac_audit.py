@@ -3,6 +3,7 @@ import csv, os
 from netcrawl import io_sql, util, config
 import textwrap
 from netcrawl.io_sql import device_db
+from netcrawl.tools.manuf.manuf import MacParser
 
 
 def _open_csv(_path):
@@ -87,7 +88,7 @@ def run_audit(csv_path):
                     results.append(csv_row)
                         
             
-    results= sorted(results, key=lambda x: x['confidence'])
+    results= sorted(results, key=lambda x: x['confidence'], reverse=True)
     if len(results) == 0: return False
     
     write_csv(results)
@@ -96,15 +97,23 @@ def run_audit(csv_path):
 
 def write_report(rows):
     ddb= device_db()
+    mp = MacParser(update=True)
+    
+    #===========================================================================
+    # try: mp.update()
+    # except: pass
+    #===========================================================================
     
     with open(os.path.join(config.run_path(), 'mac_audit_report.txt'), 'w') as outfile:
         for x in rows:
             # Get the neighbors
             located= ddb.locate_mac(x['wired_mac'])
-            result= '-'*20
+            result= '-'*50 + '\n\n'
+            
             result+= '{:12}: {}\n'.format('Matched Mac', x.pop('mac'))
-            result+= '{:12}: {}\n'.format('Wired Mac', x.pop('wired_mac'))
+            result+= '{:12}: {}\n'.format('Wired Mac', x.get('wired_mac'))
             result+= '{:12}: {}\n'.format('Confidence', x.pop('confidence'))
+            result+= '{:12}: {}\n'.format('Manufacturer', mp.search(x.pop('wired_mac')))
 
             result+= '\n'.join(['{:12}: {}'.format(k, v) for k, v in sorted(x.items())])
             result+= '\n\n{:^30} | {:^30} | {:^30} |\n'.format('Device', 'Interface', 'Neighbor')
@@ -113,7 +122,7 @@ def write_report(rows):
                 result+= '{:30} | {:30} | {:30} |\n'.format(str(loc[0]),
                                                                     str(loc[1]),
                                                                     str(loc[2]))
-            result+= '\n\n'
+            result+= '\n'
                 
             outfile.write(result)
     

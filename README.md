@@ -126,6 +126,7 @@ Discover a network segment using Nmap:
 ## Built With
 
 * [Netmiko](https://github.com/ktbyers/netmiko) - SSH and Telnet connection manager
+* [Manuf](https://github.com/coolbho3k/manuf) - OUI lookup
 
 ## Authors
 
