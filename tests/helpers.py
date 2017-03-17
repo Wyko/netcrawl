@@ -37,6 +37,10 @@ def get_example_dir(dir_name):
                 yield infile.read() 
             
 
+def prepare_test_config():
+    pass
+
+
 def populate_network_device(nd):
     pass
             

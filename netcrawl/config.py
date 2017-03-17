@@ -17,7 +17,7 @@ cc = {
     'debug': False,
     
     # Raise errors encountered during device processing
-    'raise_exceptions': True,
+    'raise_exceptions': False,
     
     'working_dir': None,
     
@@ -85,6 +85,12 @@ cc = {
         },
     }
 }
+
+def set_database_cred(username, password):
+    cc['database']['main']['username']= username
+    cc['database']['main']['password']= password
+    cc['database']['inventory']['username']= username
+    cc['database']['inventory']['password']= password
 
 def is_modified():
     '''Convenience function to find out whether the the 
@@ -177,10 +183,7 @@ def parse_config():
     cc['credentials']= get_device_creds()
     
     _cred= get_database_cred()
-    cc['database']['main']['username']= _cred['username']
-    cc['database']['main']['password']= _cred['password']
-    cc['database']['inventory']['username']= _cred['username']
-    cc['database']['inventory']['password']= _cred['password']
+    set_database_cred(_cred['username'], _cred['password'])
     
 
 def check_credentials():

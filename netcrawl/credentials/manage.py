@@ -87,7 +87,10 @@ def get_device_creds():
 def get_database_cred():
     _vault= _get_vault_data()
     if not _vault or ('database' not in _vault): 
-        return None
+        
+        # Return the default credentials for Travis CI. They're good as any.
+        return {'username': 'postgres',
+                'password': None}
     
     return _vault['database'] 
 
