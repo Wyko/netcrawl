@@ -4,6 +4,7 @@ from netcrawl import io_sql, util, config
 import textwrap
 from netcrawl.io_sql import device_db
 from netcrawl.tools.manuf.manuf import MacParser
+from netcrawl import config
 
 
 def _open_csv(_path):
@@ -198,7 +199,6 @@ def evaluate_mac(mac1, mac2):
      
 if __name__ == '__main__':
     import argparse
-    from netcrawl import config
     config.parse_config()
     
     parser = argparse.ArgumentParser(description='Perform an audit of MACs on the network')

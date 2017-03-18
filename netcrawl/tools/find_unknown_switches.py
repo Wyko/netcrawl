@@ -6,6 +6,7 @@ Created on Mar 17, 2017
 
 from netcrawl.io_sql import device_db
 from prettytable import PrettyTable
+from netcrawl import config
 import os
 
 
@@ -64,7 +65,6 @@ def _generate_table(results):
 
 
 if __name__ == '__main__':
-    from netcrawl import config
     config.parse_config()
     
     run_find_unknown_switches()
