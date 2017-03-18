@@ -4,5 +4,5 @@ keyring
 cryptography
 psycopg2
 netaddr 
-prettytables
+prettytable
 faker
