@@ -8,11 +8,12 @@ python:
   - "3.6"
   - "nightly" # currently points to 3.7-dev
   
+sudo: required
+dist: trusty
 addons:
-  postgresql: "9.5"
-
-#services:
-#  - postgresql
+    postgresql: "9.6"
+services:
+    - postgresql
   
 # command to install dependencies
 install:
