@@ -4,15 +4,29 @@ Created on Mar 17, 2017
 @author: Wyko
 '''
 
+from netcrawl.tools import MacParser
 from netcrawl.io_sql import device_db
 from prettytable import PrettyTable
 from netcrawl import config
 import os
+from test.test_builtin import filter_char
 
 
-def run_find_unknown_switches():
+def run_find_unknown_switches(filter_device_name= [],
+                              filter_interface_name= [],
+                              filter_manufacturer= [],
+                              min_macs= 3):
+    
     db = device_db()
-    results = db.execute_sql_gen('''
+    
+    where_clause=''
+    for x in filter_device_name:
+        where_clause+= " AND devices.device_name not like '%{}%' ".format(x)
+    
+    for x in filter_interface_name:
+        where_clause+= " AND interface_name not like '%{}%' ".format(x)
+    
+    results = db.execute_sql('''
         -- Get all interfaces which have more than one MAC address attached to it but no CDP Neighbors
         SELECT 
             devices.device_name, 
@@ -27,28 +41,90 @@ def run_find_unknown_switches():
         
         WHERE 
             interface_name not like '%ort%' AND
-            interface_name not like '%lan%'
+            interface_name not like '%lan%' 
+            {}
         GROUP BY 
             devices.device_name, 
             interface_name,
             interfaces.interface_id
         HAVING 
             -- Select only interfaces with more than 3 MACs and no CDP neighbors
-            count(mac_address) > 3 AND 
+            count(mac_address) >= {} AND 
             count(neighbors) = 0 AND
             
             -- Remove some common false positives
             devices.device_name not like '%ven%' AND
             interfaces.interface_name not like '%sup%'
         ORDER BY devices.device_name, macs DESC;
-        ''')
+        '''.format(where_clause, min_macs) )
     
-    t= _generate_table(results)
-    print(t)
-    _write_table(t)
+    output= _generate_table(results)
+    print(output)
+
+    for interf in results:
+
+        manufs= _get_entry_manufacturers(interf,
+                                           filter_manufacturer)
+        if manufs is None: continue
+        
+        output += '\n\n Device Report: {} - {}\n'.format(
+            interf[0], interf[2])
+        
+        output += manufs 
+    
+    _write_report(output)
+    
+
+def _get_entry_manufacturers(interf, filter):
+    db = device_db()
+    mp = MacParser()
+    
+    # Error checking
+    assert interf is not None
+    assert len(interf) == 4
+    assert interf[1] is not None
+    
+    mac_table= PrettyTable(['MAC', 'Manufacturer', 'Comment'])
+    # Get the mac addresses on each interface
+    for mac in db.execute_sql_gen('''
+        SELECT distinct mac_address
+        FROM mac
+        WHERE interface_id = %s
+    ''',
+    (interf[1], )):
+        
+        if mac is None: break
+        assert isinstance(mac, tuple)
+        mac= mac[0]
+        
+        # Get the manufacturer of the device
+        manuf= mp.get_manuf(mac)
+        comment= mp.get_comment(mac)
+        
+        if manuf is None: manuf= ''
+        if comment is None: comment= ''        
+        
+        # Remove all filtered matches
+        found= False
+        for x in filter:
+            x= x.lower()
+            if (x in manuf.lower() or
+                x in comment.lower()): 
+                found= True
+                break
+        
+        if found: break
+        
+        mac_table.add_row([mac, manuf, comment])
+    
+    # Return none if the table wasn't populated
+    if len(mac_table._rows)== 0: return None
+    
+    return str(mac_table)
+            
     
     
-def _write_table(t):
+def _write_report(t):
     path = os.path.join(config.run_path(),
                         'unknown_switches.txt')
     with open(path, 'w') as outfile:
@@ -61,13 +137,24 @@ def _generate_table(results):
     t = PrettyTable(['Device Name', 'Interface ID', 'Interface', 'MAC Count'])
     t.align = 'l'
     for r in results: t.add_row(r)
-    return t
+    return str(t)
 
 
 if __name__ == '__main__':
     config.parse_config()
     
-    run_find_unknown_switches()
+    run_find_unknown_switches(
+        filter_device_name=['idmz', 'oh-mas', 'CNMAS'],
+        filter_manufacturer=['INTERME',
+                             'HewlettP',
+                             'KyushuMa',
+                             'Cisco Systems',
+                             'Intel',
+                             'ADVANTECH',
+                             
+                             ],
+        min_macs=3,
+        )
     
     
     

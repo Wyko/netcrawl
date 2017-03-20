@@ -124,16 +124,14 @@ class NetworkDevice():
         log('Saving config.', proc=proc, v=logging.I)
         
         path = os.path.join(config.device_path(), self.unique_name()) 
-        filename = datetime.now().strftime(config.file_time()) + '.cfg'
+        
+        filename = os.path.join(path, datetime.now().strftime(config.file_time()) + '.cfg')
         
         if not os.path.exists(path):
             os.makedirs(path)
         
-        with open(path + filename, 'a') as outfile:       
-            outfile.write('\n'.join([
-                datetime.now().strftime(config.file_time()),
-                self.config,
-                '\n']))
+        with open(filename, 'w') as outfile:       
+            outfile.write(self.config)
                 
         log('Saved config.', proc=proc, v=logging.N)
     

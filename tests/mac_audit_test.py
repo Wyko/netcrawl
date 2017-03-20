@@ -66,10 +66,15 @@ def test_can_open_csv():
     assert len(c) > 2 
 
 
-def test_audit_runs_without_error(capsys):
+def test_audit_runs_without_error():
     _path= helpers.example('ip_subnet_mac.csv')
-#     with capsys.disabled():
+    
     mac_audit.run_audit(_path)
+    
+    #===========================================================================
+    # with capsys.disabled():
+    #     mac_audit.run_audit(_path)
+    #===========================================================================
 
 def _strip_mac(mac):
     return ''.join([x.upper() for x in mac if re.match(r'\w', x)])

@@ -4,7 +4,7 @@ from netcrawl import io_sql, util, config
 import textwrap
 from netcrawl.io_sql import device_db
 from netcrawl.tools.manuf.manuf import MacParser
-from netcrawl import config
+from prettytable import PrettyTable
 
 
 def _open_csv(_path):
@@ -100,7 +100,6 @@ def run_audit(csv_path):
 
 def write_report(rows):
     from datetime import datetime
-    
     ddb= device_db()
     
     path= os.path.join(config.run_path(), 'mac_audit_report.txt')
@@ -118,8 +117,8 @@ def write_report(rows):
         
         for x in rows:
             # Get the neighbors
-            located= ddb.locate_mac(x['wired_mac'])
-            result= '-'*50 + '\n\n'
+            locations= ddb.locate_mac(x['wired_mac'])
+            result=  '\n\n'
             
             result+= '{:12}: {}\n'.format('Matched Mac', x.pop('mac'))
             result+= '{:12}: {}\n'.format('Wired Mac', x.pop('wired_mac'))
@@ -127,17 +126,18 @@ def write_report(rows):
             result+= '{:12}: {}\n'.format('Manufacturer', x.pop('Manufacturer'))
 
             result+= '\n'.join(['{:12}: {}'.format(k, v) for k, v in sorted(x.items())])
-            result+= '\n\n{:^97}'.format('-- Where this MAC was seen --')
-            result+= '\n{:^30} | {:^30} | {:^30} |\n'.format('Device', 'Interface', 'Neighbor')
+            result+= '\n\nWhere this MAC was seen:\n'
             
-            for loc in located:
-                result+= '{:30} | {:30} | {:30} |\n'.format(str(loc[0]),
-                                                            str(loc[1]),
-                                                            str(loc[2]))
-            result+= '\n'
+            t = PrettyTable(['Device Name', 'Interface', 'Neighbors'])
+            t.align = 'l'
+
+            for match in locations: t.add_row(match)
+            
+            result+= str(t) + '\n'
                 
             outfile.write(result)
     print('Finished writing report to [{}]'.format(path))
+    
                         
 def write_csv(rows):
     path= os.path.join(config.run_path(), 'mac_audit.csv')

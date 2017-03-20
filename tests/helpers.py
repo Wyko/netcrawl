@@ -5,8 +5,10 @@ Created on Mar 15, 2017
 '''
 
 from faker.providers import internet, BaseProvider
+from faker import Factory
 
 import os
+from netcrawl.devices import CiscoDevice, NetworkDevice, Interface
 
 def example(file):
     '''Returns the data from a given example file as a string'''
@@ -41,9 +43,35 @@ def prepare_test_config():
     pass
 
 
-def populate_network_device(nd):
-    pass
+def populated_cisco_network_device():
+    nd = CiscoDevice()
+    
+    return nd
             
+
+def populated_cisco_interface():
+    fake = Factory.create()
+    
+    # then add new provider to faker instance
+    fake.add_provider(Cisco)
+    
+    i = Interface()
+ 
+    addr, mask = fake.ipv4(network=True).split('/')
+     
+    i.interface_ip= addr 
+    i.interface_subnet= mask
+     
+    i.interface_description= fake.sentence(nb_words=6, variable_nb_words=True)
+     
+    i.interface_type= fake.interfaceType() 
+    i.interface_number= fake.interfaceNumber()
+    i.interface_name= i.interface_type + i.interface_number
+    
+    i.get_network_ip()
+    
+    return i
+
             
 # first, import a similar Provider or use the default one
 # create new provider class
