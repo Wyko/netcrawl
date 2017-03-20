@@ -103,13 +103,13 @@ class sql_database():
     
     
     @logf
-    def execute_sql(self, *args):
-        with self.conn, self.conn.cursor() as cur:
+    def execute_sql(self, *args, proc=None):
+        with self.conn, self.conn.cursor() as cur, sql_logger(proc):
             cur.execute(*args)
             return cur.fetchall()
         
-    def execute_sql_gen(self, *args):
-        with self.conn, self.conn.cursor() as cur:
+    def execute_sql_gen(self, *args, proc= None):
+        with self.conn, self.conn.cursor() as cur, sql_logger(proc):
             cur.execute(*args)
             
             # Iterate over results and yield them in a generator

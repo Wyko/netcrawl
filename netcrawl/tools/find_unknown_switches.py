@@ -5,6 +5,7 @@ Created on Mar 17, 2017
 '''
 
 import os
+from netcrawl.wylog import logf
 from netcrawl import config
 from netcrawl.io_sql import device_db
 from netcrawl.tools import MacParser
@@ -36,9 +37,12 @@ def run_find_unknown_switches(filter_device_name= [],
             interfaces 
         JOIN mac on interfaces.interface_id = mac.interface_id
         JOIN devices on devices.device_id=mac.device_id
-        LEFT JOIN neighbors on neighbors.interface_id=mac.interface_id
+        FULL OUTER JOIN neighbors on neighbors.interface_id=mac.interface_id
         
         WHERE 
+            -- Remove some common false positives
+            devices.device_name not like '%ven%' AND
+            interface_name not like '%sup%' AND
             interface_name not like '%ort%' AND
             interface_name not like '%lan%' 
             {}
@@ -49,11 +53,8 @@ def run_find_unknown_switches(filter_device_name= [],
         HAVING 
             -- Select only interfaces with more than 3 MACs and no CDP neighbors
             count(mac_address) >= {} AND 
-            count(neighbors) = 0 AND
+            count(neighbors) = 0
             
-            -- Remove some common false positives
-            devices.device_name not like '%ven%' AND
-            interfaces.interface_name not like '%sup%'
         ORDER BY devices.device_name, macs DESC;
         '''.format(where_clause, min_macs) )
     
@@ -63,7 +64,8 @@ def run_find_unknown_switches(filter_device_name= [],
     for interf in results:
 
         manufs= _get_entry_manufacturers(interf,
-                                           filter_manufacturer)
+                                         filter_manufacturer,
+                                         db)
         if manufs is None: continue
         
         output += '\n\n Device Report: {} - {}\n'.format(
@@ -73,9 +75,8 @@ def run_find_unknown_switches(filter_device_name= [],
     
     _write_report(output)
     
-
-def _get_entry_manufacturers(interf, filter):
-    db = device_db()
+@logf
+def _get_entry_manufacturers(interf, filter, db):
     mp = MacParser()
     
     # Error checking
@@ -84,13 +85,14 @@ def _get_entry_manufacturers(interf, filter):
     assert interf[1] is not None
     
     mac_table= PrettyTable(['MAC', 'Manufacturer', 'Comment'])
+    
     # Get the mac addresses on each interface
     for mac in db.execute_sql_gen('''
         SELECT distinct mac_address
         FROM mac
         WHERE interface_id = %s
     ''',
-    (interf[1], )):
+    (interf[1], ), proc='switches._get_entry_manufacturers'):
         
         if mac is None: break
         assert isinstance(mac, tuple)
@@ -144,15 +146,17 @@ if __name__ == '__main__':
     
     run_find_unknown_switches(
         filter_device_name=['idmz', 'oh-mas', 'CNMAS'],
-        filter_manufacturer=['INTERME',
-                             'HewlettP',
-                             'KyushuMa',
-                             'Cisco Systems',
-                             'Intel',
-                             'ADVANTECH',
-                             
-                             ],
-        min_macs=3,
+        min_macs=2,
+        #=======================================================================
+        # filter_manufacturer=['INTERME',
+        #                      'HewlettP',
+        #                      'KyushuMa',
+        #                      'Cisco Systems',
+        #                      'Intel',
+        #                      'ADVANTECH',
+        #                      
+        #                      ],
+        #=======================================================================
         )
     
     
