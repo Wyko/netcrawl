@@ -26,12 +26,6 @@ I = 5
 DEBUG = 6
 D = 6
 
-# Stores current verbosity level
-VERBOSITY= 6
-
-PRINT_DEBUG= False
-
-
 # Where the log is stored
 LOG_PATH= os.path.dirname(__file__) + '/runtime/'
 
@@ -70,7 +64,7 @@ def log(msg, **kwargs):
     new_log = kwargs.get('new_log', False)
     
     # Skip debug messages (unless turned on)
-    if (v >= 5) and (PRINT_DEBUG is False): return False 
+    if (v >= 5) and (config.debug() is False): return False 
     
     msg= str(msg)
     
@@ -92,13 +86,10 @@ def log(msg, **kwargs):
     except Exception as e:
         pass
     
-#     # Debugging: Filter specific messages
-#     if 'main.' in proc:  
     # Print the message to console            
     try: 
-        if v <=  VERBOSITY and print_out: print('{:<35.35}: {}'.format(proc, msg))
-    except Exception as e:
-        pass
+        if v <=  config.verbosity() and print_out: print('{:<35.35}: {}'.format(proc, msg))
+    except: pass
     
     if not os.path.exists(config.run_path()):
         os.makedirs(config.run_path())

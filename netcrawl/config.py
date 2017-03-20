@@ -86,6 +86,15 @@ cc = {
     }
 }
 
+def debug():
+    return cc['debug']
+
+def verbosity():
+    return cc['verbosity']
+
+def set_verbosity(v):
+    cc['verbosity'] = v
+
 def set_database_cred(username, password):
     cc['database']['main']['username']= username
     cc['database']['main']['password']= password

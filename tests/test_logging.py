@@ -23,7 +23,7 @@ def test_log_is_in_running_directory():
         'log.txt'))
 
 def test_log_snip_actually_logs_something(capsys):
-    logging.VERBOSITY = logging.NORMAL
+    config.set_verbosity(logging.NORMAL)
     
     with log_snip('test_log_snip_actually_logs_something', 
                   logging.NORMAL):

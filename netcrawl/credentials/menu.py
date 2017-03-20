@@ -4,6 +4,7 @@ import sys
 
 from . import manage
 from ..wylog import logging
+from netcrawl import config
 
 
 class UserPrompt(Cmd):
@@ -132,5 +133,5 @@ class DeleteDeviceCred(UserPrompt):
         
     
 def start():
-    logging.VERBOSITY= 0
+    config.set_verbosity(0)
     MainMenu().cmdloop()

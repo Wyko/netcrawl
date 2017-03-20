@@ -150,8 +150,6 @@ class worker(multiprocessing.Process):
         # Reset global variables since subprocesses may not
         # inherit parent runstates
         config.cc= self.cc
-        logging.VERBOSITY = config.cc['verbosity']
-        logging.PRINT_DEBUG= config.cc['debug']
         
         while True:
             
@@ -505,8 +503,7 @@ def main():
         proc= proc)
     
     # Set verbosity level for wylog
-    logging.VERBOSITY = args.v
-    config.cc['verbosity']= args.v
+    config.set_verbosity(args.v)
     
     logging.PRINT_DEBUG = args.debug
     if args.debug: config.cc['debug']= True 
