@@ -106,8 +106,8 @@ def delete_device_cred(_cred=None, index= None):
     
     elif _cred is not None:
         for x in _vault['device_creds']:
-            if all((_cred['username'].lower() == x['username'].lower()),
-                   (_cred['password'] == x['password'])):
+            if ((_cred['username'].lower() == x['username'].lower()) and
+                (_cred['password'] == x['password'])):
                 _vault['device_creds'].remove(x)
                 print('Removed ' + _cred['username'])
     
@@ -115,7 +115,7 @@ def delete_device_cred(_cred=None, index= None):
                 
 
 def list_creds():
-    '''Lists the device credentials in secure form'''
+    '''Lists all credentials in secure form'''
     output= _get_vault_data()
     if output is None: return ''
     

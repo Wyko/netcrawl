@@ -110,7 +110,7 @@ class DeleteDeviceCred(UserPrompt):
     prompt = 'main:devices:delete> '
     
     def preloop(self):
-        print(manage.list_device_creds())
+        print(manage.list_creds())
     
     def do_1(self, args):
         """Delete by index"""
