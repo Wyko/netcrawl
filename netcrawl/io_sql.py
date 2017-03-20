@@ -52,48 +52,54 @@ class sql_logger():
 
 
 class sql_database():
-    def __init__(self, dbname, **kwargs):
-        # Create the tables in each database, overwriting if needed
+    def __init__(self, **kwargs):
         self.clean = kwargs.get('clean', False)
-        self.create_database(dbname)
         
-    
-    """
-    def delete_database(self, db_name, cur= None):
-        '''Very much deletes a database'''
+    def delete_database(self, db_name):
+        '''Deletes a database
+        
+        Raises:
+            FileExistsError: If the database to be deleted 
+                does not exist.
+            IOError: If the database could not be deleted and 
+                still exists after execution
+        '''
+        
         proc= 'sql_database.delete_database'
         
-        def _execute(db_name, cur):
-            # Make sure the database exists
-            cur.execute("SELECT 1 from pg_database WHERE datname= %s", (db_name, ))
-            
-            if not cur.fetchone(): 
-                log('Database [{}] does not exist'.format(db_name), v=logging.I, proc= proc)
-                return False 
-            
-            cur.execute('''
-                -- Disallow new connections
-                UPDATE pg_database SET datallowconn = 'false' WHERE datname = '{0}';
-                ALTER DATABASE {0} CONNECTION LIMIT 1;
+        if not self.database_exists(db_name):
+            log('Database [{}] does not exist'.format(db_name), v=logging.A, proc= proc)
+            raise FileExistsError('Database [{}] does not exist'.format(db_name)) 
+        else:
+            log('Database [{}] exists, proceeding to delete'.format(db_name), v=logging.I, proc= proc)
+        
+        with psycopg2.connect(**config.postgres_args()) as conn:
+            with conn.cursor() as cur, sql_logger(proc):
+        
+                cur.execute('''
+                    -- Disallow new connections
+                    UPDATE pg_database SET datallowconn = 'false' WHERE datname = '{0}';
+                    ALTER DATABASE {0} CONNECTION LIMIT 1;
+                    
+                    -- Terminate existing connections
+                    SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{0}';
+                '''.format(db_name))
                 
-                -- Terminate existing connections
-                SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{0}';
-            '''.format(db_name))
-            cur.commit()
-            
-            cur.execute('DROP DATABASE {0}'.format(db_name))
+        # Create a new isolated transaction block to drop the database                
+        with psycopg2.connect(**config.postgres_args()) as conn:
+            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)    
+            with conn.cursor() as cur, sql_logger(proc):
+                cur.execute('DROP DATABASE {0}'.format(db_name))
+        
+        # Check to make sure it worked
+        if not self.database_exists(db_name):
+            log('Database [{}] deleted'.format(db_name), v=logging.N, proc= proc)
             return True
         
-        if cur: 
-            return _execute(db_name, cur)
         else:
-            with psycopg2.connect(dbname='postgres', 
-                                  user='wyko', 
-                                  password='pass', 
-                                  host='localhost') as conn:
-                with conn.cursor() as cur, sql_logger(proc):
-                    return _execute(db_name, cur)
-    """            
+            log('Database [{}] could not be deleted'.format(db_name), v=logging.CRITICAL, proc= proc)
+            raise IOError('Database [{}] could not be deleted'.format(db_name))
+        
     
     
     @logf
@@ -110,19 +116,30 @@ class sql_database():
             for result in cur:
                 if result is None: return True
                 else: yield result
-            
+    
     @logf
-    def create_database(self, new_db):
-        '''Creates a new database'''
-        
-        proc = 'sql_database.create_database'
+    def database_exists(self, db):
+        '''Returns true is the specified database exists'''
+        proc = 'sql_database._database_exists'
         
         with psycopg2.connect(**config.postgres_args()) as conn:
             with conn.cursor() as cur, sql_logger(proc):
-                cur.execute("SELECT 1 from pg_database WHERE datname= %s", (new_db,))
-                exists = bool(cur.fetchone()) 
+                cur.execute("SELECT 1 from pg_database WHERE datname= %s", (db,))
+                return bool(cur.fetchone()) 
+                
+    @logf
+    def create_database(self, new_db):
+        '''Creates a new database
+        
+        Raises:
+            FileExistsError: If database already exists
             
-        if not exists:
+        '''
+        proc = 'sql_database.create_database'
+            
+        if self.database_exists(new_db):
+            raise FileExistsError('Database already exists')
+        else:
             with psycopg2.connect(**config.postgres_args()) as conn:
                 conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
                 with conn.cursor() as cur, sql_logger(proc):
@@ -192,7 +209,10 @@ class main_db(sql_database):
         
         self.DB_NAME = 'main'
         
-        sql_database.__init__(self, self.DB_NAME, **kwargs)
+        sql_database.__init__(self, **kwargs)
+        
+        try: self.create_database(self.DB_NAME)
+        except FileExistsError: pass
         
         self.conn = psycopg2.connect(**config.main_args())
         self.create_table(drop_tables=self.clean)
@@ -597,7 +617,10 @@ class device_db(sql_database):
         
         self.DB_NAME = 'inventory'
         
-        sql_database.__init__(self,self.DB_NAME, **kwargs)
+        sql_database.__init__(self, **kwargs)
+        
+        try: self.create_database(self.DB_NAME)
+        except FileExistsError: pass
 
         self.conn = psycopg2.connect(**config.inventory_args())
         self.create_table(drop_tables=self.clean)
