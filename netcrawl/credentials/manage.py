@@ -90,7 +90,7 @@ def get_database_cred():
         
         # Return the default credentials for Travis CI. They're good as any.
         return {'username': 'postgres',
-                'password': None}
+                'password': ''}
     
     return _vault['database'] 
 

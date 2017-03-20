@@ -92,14 +92,17 @@ def set_database_cred(username, password):
     cc['database']['inventory']['username']= username
     cc['database']['inventory']['password']= password
 
+
 def is_modified():
     '''Convenience function to find out whether the the 
     config has been modified (i.e, after it has been
     parsed from config.ini'''
     return cc['modified']
 
+
 def raise_exceptions():
     return cc['raise_exceptions']
+
 
 def postgres_args():
     '''This just uses the main_db credentials'''
@@ -110,6 +113,7 @@ def postgres_args():
             'port': cc['database']['main']['port'],
             }
 
+
 def main_args():
     return {'dbname': cc['database']['main']['dbname'],
             'user': cc['database']['main']['username'],
@@ -117,6 +121,7 @@ def main_args():
             'host': cc['database']['main']['server'],
             'port': cc['database']['main']['port'],
             }
+    
     
 def inventory_args():
     return {'dbname': cc['database']['inventory']['dbname'],

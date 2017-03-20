@@ -14,7 +14,6 @@ class sqlTest(unittest.TestCase):
     def setUp(self):
         config.parse_config()
         self.dbName = 'pytestdb'
-        self.db= io_sql.sql_database()
 
 
     def tearDown(self):
@@ -27,15 +26,17 @@ class sqlTest(unittest.TestCase):
         db_name= '_'.join(['fakedb',
                            fake.word(),
                            fake.word(),
-                           fake.word(),])
+                           fake.word(),
+                          ])
         
-        self.db.create_database(db_name)
+        _db= io_sql.sql_database()
         
-        assert self.db.database_exists(db_name)
         
-        self.db.delete_database(db_name)
+        _db.create_database(db_name)
+        assert _db.database_exists(db_name)
         
-        assert not self.db.database_exists(db_name)
+        _db.delete_database(db_name)
+        assert not _db.database_exists(db_name)
         
         
 

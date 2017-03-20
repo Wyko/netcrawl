@@ -4,13 +4,13 @@ Created on Mar 16, 2017
 @author: Wyko
 '''
 
+from netcrawl import config
 from netcrawl.credentials import manage
 from cryptography import fernet
 from faker import Faker
 import keyring
 
 def setup_module(module):
-    from netcrawl import config
     config.parse_config()
 
 def test_get_Fernet_returns_a_key():
@@ -28,5 +28,10 @@ def test_get_Fernet_returns_a_key():
     keyring.delete_password(appname, username)
     
     assert keyring.get_password(appname, username) is None
-    
+
+
+#===============================================================================
+# def test_check_credentials_no_error():
+#     config.check_credentials()
+#===============================================================================
     
