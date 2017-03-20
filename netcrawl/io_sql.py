@@ -665,8 +665,10 @@ class device_db(sql_database):
         with self.conn, self.conn.cursor() as cur:
             cur.execute('''
                 SELECT distinct mac_address
-                FROM (SELECT distinct interface_id
-                      FROM (SELECT distinct device_id
+                FROM (
+                      SELECT distinct interface_id
+                      FROM (
+                            SELECT distinct device_id
                             FROM interfaces
                             WHERE network_ip = %s) as foo
                       JOIN interfaces ON interfaces.device_id=foo.device_id) as bar
