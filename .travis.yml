@@ -11,13 +11,12 @@ python:
 addons:
   postgresql: "9.5"
 
-services:
-  - postgresql
+#services:
+#  - postgresql
   
 # command to install dependencies
 install:
   - pip install .
-  - pip install -U keyrings.alt
   - pip install pytest-cov coveralls
   - pip install -r requirements.txt
   
