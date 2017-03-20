@@ -28,6 +28,11 @@ os:
   - linux
 #  - osx
 
+addons:
+  postgresql: "9.4"
+  postgresql: "9.5"
+  postgresql: "9.1"
+
 matrix:
   allow_failures:
     - python:

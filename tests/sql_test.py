@@ -20,7 +20,7 @@ class sqlTest(unittest.TestCase):
     def tearDown(self):
         pass
 
-
+    
     def test_Create_and_Destroy_Database(self):
         '''Tests the creation of a new database'''
         fake = Faker()
