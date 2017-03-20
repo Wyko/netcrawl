@@ -14,7 +14,7 @@ from argparse import RawDescriptionHelpFormatter
 
 from prettytable import PrettyTable
 
-from netcrawl import config
+from netcrawl import config, util
 from netcrawl.io_sql import device_db
 from netcrawl.tools.manuf.manuf import MacParser
 import textwrap
@@ -30,18 +30,26 @@ def locate(macs):
     ddb= device_db()
     mp = MacParser()
     
+    # If just one mac was passed, make sure it works
+    if not isinstance(macs, list):
+        macs= [macs]
+    
     for mac in macs:
-        locations= ddb.locate_mac(mac)
+        
         
         t = PrettyTable(['Device Name', 'Interface', 'CDP Neighbors'])
         t.align = 'l'
         
+        print('MAC: ', mac)
+        
+        # Normalize the MAC
+        mac = util.ucase_letters(mac)
+        
         manuf= mp.get_manuf(mac)
         comment= mp.get_comment(mac)
-        
-        print('MAC: ', mac)
         print('Manufacturer: ', manuf, ', ', comment)
         
+        locations= ddb.locate_mac(mac)
         if len(locations) == 0:
             print('No matches found')
         else:
