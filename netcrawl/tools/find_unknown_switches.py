@@ -4,12 +4,11 @@ Created on Mar 17, 2017
 @author: Wyko
 '''
 
-from netcrawl.tools import MacParser
-from netcrawl.io_sql import device_db
-from prettytable import PrettyTable
-from netcrawl import config
 import os
-from test.test_builtin import filter_char
+from netcrawl import config
+from netcrawl.io_sql import device_db
+from netcrawl.tools import MacParser
+from prettytable import PrettyTable
 
 
 def run_find_unknown_switches(filter_device_name= [],
