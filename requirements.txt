@@ -1,4 +1,4 @@
--e git://github.com/ktbyers/netmiko/commit/63030fa7fbf42cc9555aff8f8e2f5951d2c99d12
+git+git://github.com/ktbyers/netmiko/commit/63030fa7fbf42cc9555aff8f8e2f5951d2c99d12
 python-nmap
 keyring
 keyrings.alt
