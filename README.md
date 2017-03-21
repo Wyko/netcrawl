@@ -2,14 +2,16 @@
 
 # netcrawl
 
-Netcrawl is a network discovery tool designed to poll one or more devices, inventory them, and then continue the process through the device's neighbors.
+Netcrawl is a tool designed to discover and poll one or more devices, inventory them, and then provide useful data on the processed devices.
 
 This package is still in development.
 
 ## Features
 
+* Switchport Tracing: Discover which devices and interfaces have seen a particular MAC
+* Wireless Audit: Discovers likely matches for rogue wireless devices among physically connected devices on a subnet
+* MAC Audit: Discover potential unauthorized switches on your network  
 * Automatically backs up device configurations
-* Stores MAC addresses by interface, allowing for switchport tracing of devices
 * Stores a neighbor database to find layer two connection mappings
 * Multiple ways to auto-detect system type of newly discovered devices
 * Works with Nmap to allow for discovery of both neighboring and seperated devices
@@ -76,15 +78,12 @@ Target Specification:
 
 These instructions will get you a copy of the project up and running on your local machine.
 
-### Pip Install
+### Dependencies
 * *[Netmiko](https://github.com/ktbyers/netmiko)* - Any version that has the autodetect functionality.
-* *[wylog](https://github.com/Wyko/wylog)*
 * *psycopg2* - PostgreSQL package
 * *[cryptography](https://cryptography.io)*
 * *[keyring](https://pypi.python.org/pypi/keyring)*
   * [Running `keyring` on linux](https://pypi.python.org/pypi/keyring#using-keyring-on-ubuntu-16-04)
-
-`pip install wylog keyring psycopg2 cryptography git+git://github.com/ktbyers/netmiko.git@1bdde6bee64d596209be9e0ed0b189d8b58a0711`
 
 ### Manual Install
 * *[PostgreSQL](https://www.postgresql.org/)*
@@ -95,8 +94,6 @@ Without installing this, you will not be able to use the -sN function.
 * *[Nmap](https://nmap.org)* - Manually download and install
 * *[python-nmap](http://xael.org/pages/python-nmap-en.html)* - for scanning function
 
-`pip install python-nmap`
-
 
 ### Testing
 
@@ -104,9 +101,10 @@ Without installing this, you will not be able to use the -sN function.
 
 ## Installation
 
-1. Install Postgresql and set up the **main** and **inventory** databases. If these are not created and netcrawl will attempt to create them automatically.
-2. Follow any additional directions as needed to install `keyring` on your platform
-3. Add device and database credentials using `netcrawl -m`
+1. Run `pip install -U netcrawl`
+2. Install Postgresql and set up the **main** and **inventory** databases. If these are not created netcrawl will attempt to create them automatically.
+3. Follow any additional directions as needed to install `keyring` on your platform
+4. Add device and database credentials using `netcrawl -m`
 
 ## Usage
 

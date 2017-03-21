@@ -132,6 +132,20 @@ def normal_run(**kwargs):
         proc=proc, v=logging.H)
 
 
+def process_duplicate_device(device, ddb):
+    proc= 'main.process_duplicate_device'
+    
+    if not ddb.unique_name_exists(device.unique_name()):
+        log('Not a duplicate record: [{}]'.format(
+            device.device_name), v=logging.N, proc= proc)
+        return False
+    
+    log('Positive Duplicate record: [{}]'.format(
+            device.device_name), v=logging.N, proc= proc)
+    
+    
+    
+
 class worker(multiprocessing.Process):
     
     def __init__(self,

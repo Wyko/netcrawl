@@ -129,16 +129,11 @@ class sql_database():
                 
     @logf
     def create_database(self, new_db):
-        '''Creates a new database
-        
-        Raises:
-            FileExistsError: If database already exists
-            
-        '''
+        '''Creates a new database'''
         proc = 'sql_database.create_database'
             
         if self.database_exists(new_db):
-            raise FileExistsError('Database already exists')
+            return True
         else:
             with psycopg2.connect(**config.postgres_args()) as conn:
                 conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
@@ -647,6 +642,23 @@ class device_db(sql_database):
             return cur.fetchall()
     
     
+    def delete_device_record(self, id):
+        '''Removes a record from the devices table''' 
+        proc = 'device_db.remove_device_record'
+        
+        # Error checking
+        assert isinstance(id, int), (
+            proc + ': id [{}] is not int'.format(type(id)))
+        
+        # Delete the entry
+        with self.conn, self.conn.cursor() as cur:
+            cur.execute('''
+                DELETE 
+                FROM devices
+                WHERE device_id = %s
+                ''', (id, ))
+    
+    
     def devices_on_subnet(self, subnet):
         with self.conn, self.conn.cursor() as cur:
             cur.execute('''
@@ -694,76 +706,146 @@ class device_db(sql_database):
                 ''', (device_id, ))
             return cur.fetchall()
     
-    def unique_name_exists(self, name):
-        '''Returns True if a given unique_name already exists'''
-        proc = 'io_sql.unique_name_exists'
+    #===========================================================================
+    # def device_id_exists(self, id):
+    #     '''Returns True if a given device_id exists'''
+    #     
+    #     proc = 'io_sql.device_id_exists'
+    #     
+    #     with self.conn, self.conn.cursor() as cur:
+    #         cur.execute('''
+    #             SELECT device_id 
+    #             FROM devices 
+    #             WHERE device_id = %s;
+    #             ''',
+    #             (id, ))
+    #         result= cur.fetchone()
+    #         
+    #         if result is None: return False
+    #         else: return result[0]
+    #===========================================================================
+    
+    #===========================================================================
+    # def unique_name_exists(self, name):
+    #     '''Returns True if a given unique_name already exists'''
+    #     proc = 'io_sql.unique_name_exists'
+    #     
+    #     with self.conn, self.conn.cursor() as cur:
+    #         cur.execute('''
+    #             SELECT device_id 
+    #             FROM devices 
+    #             WHERE unique_name = %s;
+    #             ''',
+    #             (name.upper(),))
+    #         result= cur.fetchone()
+    #         
+    #         if result is None: return False
+    #         else: return result[0]
+    #===========================================================================
+    
+    
+    def exists(self,
+               device_id= None,
+               unique_name= None,
+               device_name= None,
+               ):
+        
+        # Error checking
+        if (device_id is None and
+            unique_name is None and
+            device_name is None):
+            raise ValueError('No values passed')
         
         with self.conn, self.conn.cursor() as cur:
-            cur.execute('''
-                select exists 
-                (select * from devices 
-                where unique_name = %s
-                limit 1);
-                ''',
-                (name.upper(),))
-            return cur.fetchone()[0]  # Returns a (False,) tuple)
-    
-    
-    def add_device_nd(self, _device=None, _list=None):
-        """Appends a device or a list of devices to the database
+            
+            # Try each possible method until a match is found
+            if device_id:
+                cur.execute('''
+                    SELECT device_id 
+                    FROM devices 
+                    WHERE device_id = %s
+                    limit 1;
+                    ''',
+                    (device_id, ))
+                result= cur.fetchone()
+                if result: return result[0]
+                
+            if unique_name:
+                cur.execute('''
+                    SELECT device_id 
+                    FROM devices 
+                    WHERE unique_name = %s
+                    limit 1;
+                    ''',
+                    (unique_name, ))
+                result= cur.fetchone()
+                if result: return result[0]
+                
+            if device_name:
+                cur.execute('''
+                    SELECT device_id 
+                    FROM devices 
+                    WHERE device_name = %s
+                    limit 1;
+                    ''',
+                    (device_name, ))
+                result= cur.fetchone()
+                if result: return result[0]
         
-        Optional Args:
+        return False
+            
+            
+            
+            
+    
+    def add_device_nd(self, _device):
+        """Appends a device to the database
+        
+        Args:
             _device (network_device): A single network_device
-            _list (List): List of network_device objects
             
         Returns:
-            Boolean: True if write was successful, False otherwise.
+            Boolean: False if write was unsuccessful
+            Int: Index of the device that was added, if successful
         """ 
         proc = 'device_db.add_device_nd'
         
         # Return an error if no data was passed    
-        if not (_list or _device): 
+        if not _device: 
             log('No devices to add', proc=proc, v=logging.A)
             return False
         
-        if not _list: _list = []
-        
-        log('Adding device(s) to devices table'.format(self.DB_NAME), proc=proc, v=logging.N)
-        
-        # If a single device was passed, add it for group processing
-        if _device: _list.append(_device)
+        log('Adding device to devices table'.format(self.DB_NAME), proc=proc, v=logging.N)
         
         # Do everything in one transaction
         with self.conn, self.conn.cursor() as cur:
             
-            # Process each device
-            for _device in _list:
-                device_id = self.insert_device_entry(_device, cur)
+            device_id = self.insert_device_entry(_device, cur)
+            
+            # Add all the device's serials
+            for serial in _device.serial_numbers:
+                self.insert_serial_entry(device_id, serial, cur)
+            
+            # Add all of the device's interfaces            
+            for interf in _device.interfaces:
+                interface_id = self.insert_interface_entry(device_id, interf, cur)
                 
-                # Add all the device's serials
-                for serial in _device.serial_numbers:
-                    self.insert_serial_entry(device_id, serial, cur)
+                # Add all the interface's mac addresses
+                for mac_address in interf.mac_address_table:
+                    mac_id = self.insert_mac_entry(device_id, interface_id, mac_address, cur)
                 
-                # Add all of the device's interfaces            
-                for interf in _device.interfaces:
-                    interface_id = self.insert_interface_entry(device_id, interf, cur)
-                    
-                    # Add all the interface's mac addresses
-                    for mac_address in interf.mac_address_table:
-                        mac_id = self.insert_mac_entry(device_id, interface_id, mac_address, cur)
-                    
-                    # Add each neighbor + ip that was matched to an interface
-                    for neighbor in interf.neighbors:
-                        neighbor_id = self.insert_neighbor_entry(device_id, interface_id, neighbor, cur)
-                        for n_ip in neighbor: self.insert_neighbor_ip_entry(neighbor_id, n_ip, cur)
-                    
-                # Add each neighbor + ip not matched to an interface
-                for neighbor in _device.neighbors:
-                    neighbor_id = self.insert_neighbor_entry(device_id, None, neighbor, cur)
+                # Add each neighbor + ip that was matched to an interface
+                for neighbor in interf.neighbors:
+                    neighbor_id = self.insert_neighbor_entry(device_id, interface_id, neighbor, cur)
                     for n_ip in neighbor: self.insert_neighbor_ip_entry(neighbor_id, n_ip, cur)
+                
+            # Add each neighbor + ip not matched to an interface
+            for neighbor in _device.neighbors:
+                neighbor_id = self.insert_neighbor_entry(device_id, None, neighbor, cur)
+                for n_ip in neighbor: self.insert_neighbor_ip_entry(neighbor_id, n_ip, cur)
                     
         self.conn.commit()
-        return True
+        return device_id
     
     
     def insert_device_entry(self, _device, cur):

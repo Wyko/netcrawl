@@ -5,10 +5,11 @@ Created on Mar 15, 2017
 '''
 
 from faker.providers import internet, BaseProvider
-from faker import Factory
+from faker import Factory, Faker
 
 import os
 from netcrawl.devices import CiscoDevice, NetworkDevice, Interface
+import textwrap
 
 def example(file):
     '''Returns the data from a given example file as a string'''
@@ -44,7 +45,17 @@ def prepare_test_config():
 
 
 def populated_cisco_network_device():
+    fake= Faker()
+    fake.add_provider(Cisco)
+    
     nd = CiscoDevice()
+    nd.device_name= '_'.join(['fakedevice',
+                           fake.word(),
+                           fake.word(),
+                           fake.word(),
+                          ])
+    for i in range(1, fake.random_int(1, 10)):
+        nd.serial_numbers.append(fake.ios_serial())
     
     return nd
             
@@ -115,4 +126,33 @@ class Cisco(BaseProvider):
             name+= '.' + str(self.random_int(1, 999))
             
         return name
+    
+    def ios_serial(self):
+        fake = Factory.create()
+        
+        return {'name': '_'.join(['fakeserial',
+                           fake.word(),
+                           fake.word()]),
+                 
+                'desc': '_'.join(['fakedesc',
+                           fake.word(),
+                           fake.word()]),
+                 
+                'pid': fake.uuid4(),
+                'vid': fake.uuid4(),
+                'serialnum': fake.uuid4()
+                }
+        
+
+
+
+
+
+
+
+
+
+
+
+
                 
