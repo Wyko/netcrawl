@@ -19,8 +19,8 @@ class IosDevice(CiscoDevice):
         interfaces = []
         # If no device config was passed, return
         if not self.config: 
-            log('Error: No data in self.config.', proc=proc, v=logging.A)
-            raise ValueError(proc + ': No data in self.config.')
+            log('Error: No data in self.config', proc=proc, v=logging.A)
+            raise ValueError(proc + ': No data in self.config')
         
         # Split out the interfaces from the raw config
         raw_interfaces = re.findall(r'\n(^interface[\s\S]+?)\n!', self.config, (re.M | re.I))

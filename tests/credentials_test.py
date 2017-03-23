@@ -32,6 +32,6 @@ def test_get_Fernet_returns_a_key():
 
 #===============================================================================
 # def test_check_credentials_no_error():
-#     config.check_credentials()
+#     config.cc.check_credentials()
 #===============================================================================
     

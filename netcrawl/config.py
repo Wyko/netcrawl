@@ -4,212 +4,121 @@ from .credentials.manage import get_device_creds, get_database_cred
 import textwrap
 
 
-cc = {
+
+class Database:
+    def __init__(self, dbname):
+        self.name= dbname
+        self.username= None
+        self.password= None
+        self.server= 'localhost'
+        self.port= 5432
     
-    # Whether or not the config has been updated,
-    # like after it has been parsed from settings.ini
-    'modified': False,
-    
-    # The global verbosity level for logging
-    'verbosity': 3,
-    
-    # Whether or not to process debug messages
-    'debug': False,
-    
-    # Raise errors encountered during device processing
-    'raise_exceptions': False,
-    
-    'working_dir': None,
-    
-    'time': {
-        'format': {
-            'pretty': '%Y-%m-%d %H:%M:%S',
-            'file': '%Y%m%d_%H%M%S',
-        },
-    },
-                  
-    'delay': {
-        # The starting delay factor in cli connections
-        'base_delay': 1,
+    @property    
+    def args(self):
+        '''Returns a dict used to populate a psycopg2 connection'''
+        
+        return {'dbname': self.name,
+                'user': self.username,
+                'password': self.password,
+                'host': self.server,
+                'port': self.port,
+                }
+
+
+class Config:
+    def __init__(self):
+        
+        # Whether or not the config has been updated,
+        # like after it has been parsed from settings.ini
+        self.modified= False
+        
+        # The global verbosity level for logging
+        self.verbosity= 3
+        
+        # Whether or not to process debug messages
+        self.debug= False
+        
+        # Raise errors encountered during device processing
+        self.raise_exceptions= False
+        
+        self.working_dir= os.path.dirname(os.path.abspath(__file__))
+        
+        self.pretty_time= '%Y-%m-%d %H:%M:%S'
+        self.file_time= '%Y%m%d_%H%M%S'
+        
+        # The starting delay factor in cli connections              
+        self.base_delay= 1
 
         # The amount the delay increases on failed attempts
-        'delay_increase': 0.3,
-    },
-        
-    'file': {
-        
-#         'root_path': os.path.abspath(os.sep),
-        'root_path': os.path.join(os.path.expanduser('~')),
-        
-        'log': {
-            'name': 'log.txt',
-            'full_path': None,
-        },
-        
-        'run': {
-            'folder': 'netcrawl',
-            'full_path': None,
-        },
-             
-        'devices': {
-            'folder': 'devices',
-            'full_path': None,
-        },
-        
-    },
+        self.delay_increase= 0.3
     
-    # User credentials to log in to devices
-    'credentials': [
-#         {
-#             'username': None,
-#             'password': None,
-#             'type': None,
-#         },
-    ],
+        self.root_path= os.path.join(os.path.expanduser('~'))
+            
+        self.run_folder= 'netcrawl'
+        self.run_path= os.path.join(self.root_path, self.run_folder)
         
-    'database': {
-        'main': {
-            'username': None,
-            'password': None,
-            'dbname': 'main',
-            'server': 'localhost',
-            'port': 5432,
-        },
+        self.devices_path= os.path.join(self.run_path, 'devices')
         
-        'inventory': {
-            'username': None,
-            'password': None,
-            'dbname': 'inventory',
-            'server': 'localhost',
-            'port': 5432,
-        },
-    }
-}
+        self.log_path= os.path.join(self.run_path, 'log.txt')
+        
+        self.vault_path= os.path.join(self.run_path, 'vault')
+        
+        # Make the running directories
+        os.makedirs(self.devices_path, exist_ok= True)
+        
+        # Check if everything worked
+        if not os.path.isdir(self.devices_path):
+            raise IOError('Filepath could not be created: [{}]'.format(self.devices_path))
+        
+        
+        self.postgres= Database('postgres')
+        self.main= Database('main')
+        self.inventory = Database('inventory')
 
-def debug():
-    return cc['debug']
+        # User credentials to log in to devices
+        #=======================================================================
+        # self.credentials= [
+        #     {
+        #         'username': None,
+        #         'password': None,
+        #         'type': None,
+        #     },
+        # ]
+        #=======================================================================
+        
+        
 
-def verbosity():
-    return cc['verbosity']
-
-def set_verbosity(v):
-    cc['verbosity'] = v
-
-def set_database_cred(username, password):
-    cc['database']['main']['username']= username
-    cc['database']['main']['password']= password
-    cc['database']['inventory']['username']= username
-    cc['database']['inventory']['password']= password
-
-
-def is_modified():
-    '''Convenience function to find out whether the the 
-    config has been modified (i.e, after it has been
-    parsed from config.ini'''
-    return cc['modified']
-
-
-def raise_exceptions():
-    return cc['raise_exceptions']
-
-
-def postgres_args():
-    '''This just uses the main_db credentials'''
-    return {'dbname': 'postgres',
-            'user': cc['database']['main']['username'],
-            'password': cc['database']['main']['password'],
-            'host': cc['database']['main']['server'],
-            'port': cc['database']['main']['port'],
-            }
+    def set_all_database_creds(self, username, password):
+        for db in (self.postgres,
+                   self.main,
+                   self.inventory):
+            db.username= username
+            db.password= password
+            
+    def check_credentials(self):
+        if (self.credentials is None or
+            len(self.credentials) == 0):
+            raise IOError('There are no device credentials. Add one with -m')
 
 
-def main_args():
-    return {'dbname': cc['database']['main']['dbname'],
-            'user': cc['database']['main']['username'],
-            'password': cc['database']['main']['password'],
-            'host': cc['database']['main']['server'],
-            'port': cc['database']['main']['port'],
-            }
-    
-    
-def inventory_args():
-    return {'dbname': cc['database']['inventory']['dbname'],
-            'user': cc['database']['inventory']['username'],
-            'password': cc['database']['inventory']['password'],
-            'host': cc['database']['inventory']['server'],
-            'port': cc['database']['inventory']['port'],
-            }
-
-def pretty_time():
-    return cc['time']['format']['pretty']
-
-def file_time():
-    return cc['time']['format']['file']
-
-def run_path():
-    return cc['file']['run']['full_path']
-
-def creds():
-    return cc['credentials']
-
-def log_path():
-    return cc['file']['log']['full_path']
-
-def root_path():
-    return cc['file']['root_path']
-
-def device_path():
-    return cc['file']['devices']['full_path']
-
-def vault_path():
-    return os.path.join(cc['file']['run']['full_path'], 'vault')
-
-def working_dir():
-    return cc['working_dir']
-
-def set_working_dir():
-    cc['working_dir']= os.path.dirname(os.path.abspath(__file__))
-
-def setting_path():
-    return os.path.join(working_dir(), 'settings.ini')
+# Stores the global config
+####################
+cc= None
+####################
 
 
 def parse_config():
     proc= 'config.parse_config'
     
-    cc['modified']= True
-    set_working_dir()
+    global cc
+    if not cc: cc= Config()
     
-    # Parse and make the runtime folders
-    cc['file']['run']['full_path']= os.path.join(cc['file']['root_path'], cc['file']['run']['folder'])    
-    cc['file']['devices']['full_path']= os.path.join(cc['file']['run']['full_path'], cc['file']['devices']['folder'])
-    # Get the log path
-    cc['file']['log']['full_path'] = os.path.join(cc['file']['run']['full_path'],
-                                                  cc['file']['log']['name'])
-
-    os.makedirs(device_path(), exist_ok= True)
-    
-    if not os.path.isdir(device_path()):
-        raise IOError('Filepath could not be created: [{}]'.format(device_path()))
-    
-    
-    # Populate credentials
-    cc['credentials']= get_device_creds()
-    
-    _cred= get_database_cred()
-    set_database_cred(_cred['username'], _cred['password'])
+    cc.credentials= get_device_creds()
+        
+    cc.set_all_database_creds(**get_database_cred())
     
 
-def check_credentials():
-    if (cc['credentials'] is None or
-        len(cc['credentials']) == 0):
-        raise IOError('There are no device credentials. Add one with -m') 
     
-    if (cc['database']['main']['username'] is None
-        or cc['database']['main']['password'] is None):
-        raise IOError('There are no database credentials. Add one with -m') 
-
-
 
 
 

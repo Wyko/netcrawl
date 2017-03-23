@@ -4,12 +4,44 @@ Created on Mar 15, 2017
 @author: Wyko
 '''
 
-from faker.providers import internet, BaseProvider
+from faker.providers import BaseProvider
 from faker import Factory, Faker
+from netcrawl.devices import CiscoDevice, Interface
+from netcrawl import io_sql
+from contextlib import contextmanager
 
 import os
-from netcrawl.devices import CiscoDevice, NetworkDevice, Interface
-import textwrap
+
+
+@contextmanager
+def fakeDevice():
+    ''' Helper function to create a fake device and add 
+    it to the database, then clean it up afterwards'''
+    
+    db= io_sql.device_db()
+    device= populated_cisco_network_device()
+    
+    assert not db.exists(unique_name= device.unique_name, 
+                         device_name= device.device_name)
+    
+    index=  db.add_device_nd(device)
+    
+    # Make sure the device was created
+    assert db.exists(device_id= index)
+    assert device.device_id == index
+    
+    # Close the connection to prevent too many connections accumulating
+    del(db)
+    
+    yield {'index': index,
+           'device': device
+           }
+        
+    # After we're done with it, delete it
+    db= io_sql.device_db()
+    db.delete_device_record(index)
+    assert not db.exists(device_id= index)
+    
 
 def example(file):
     '''Returns the data from a given example file as a string'''
@@ -56,6 +88,8 @@ def populated_cisco_network_device():
                           ])
     for i in range(1, fake.random_int(1, 10)):
         nd.serial_numbers.append(fake.ios_serial())
+    
+    nd.config= fake.text(max_nb_chars=fake.random_int())
     
     return nd
             

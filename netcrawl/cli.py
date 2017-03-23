@@ -33,9 +33,11 @@ def start_cli_session(handler=None,
     Returns: 
         Dict: 
             'connection': Netmiko ConnectHandler object opened to the enable prompt 
-            'TCP_22': True if port 22 is open
-            'TCP_23': True if port 23 is open
-            'cred': The first successful credential dict 
+            'tcp_22': True if port 22 is open
+            'tcp_23': True if port 23 is open
+            'username': The first successful credential's username
+            'password': The first successful credential's password
+            'cred_type': The first successful credential's type 
             
     Raises:
         IOError: If connection could not be established
@@ -48,26 +50,28 @@ def start_cli_session(handler=None,
     assert isinstance(ip, str), proc + ': Ip [{}] is not a string.'.format(type(ip)) 
     
     result = {
-            'TCP_22': port_is_open(22, ip),
-            'TCP_23': port_is_open(23, ip),
+            'tcp_22': port_is_open(22, ip),
+            'tcp_23': port_is_open(23, ip),
             'connection': None,
-            'cred': None,
+            'username': None,
+            'password': None,
+            'cred_type': None,
             }
     
     # Error checking        
     if cred: # User supplied credentials
         assert isinstance(cred, dict), 'Cred is type [{}]. Should be dict.'.format(type(cred))
     else:
-        assert len(config.creds()) > 0, 'No credentials available'
+        assert len(config.cc.credentials) > 0, 'No credentials available'
     if port: assert port is 22 or port is 23, 'Invalid port number [{}]. Should be 22 or 23.'.format(str(port))
 
 
     # Switch between global creds or argument creds
     if cred: _credList = cred
-    else: _credList = config.creds()
+    else: _credList = config.cc.credentials
     
     # Check to see if SSH (port 22) is open
-    if not result['TCP_22']:
+    if not result['tcp_22']:
         log('Port 22 is closed on %s' % ip, ip=ip, proc=proc, v=logging.I)
     elif port is None or port is 22: 
         # Try wylog in with each credential we have
@@ -82,7 +86,10 @@ def start_cli_session(handler=None,
                     secret=cred['password'],
                 )
                 
-                result['cred'] = cred
+                result['username'] = cred['username']
+                result['password'] = cred['password']
+                result['cred_type'] = cred['cred_type']
+                
                 log('Successful ssh auth to %s using %s, %s' % (ip, cred['username'], cred['password'][:2]), ip=ip, proc=proc, v=logging.N)
                 
                 return result
@@ -99,7 +106,7 @@ def start_cli_session(handler=None,
                 break
     
     # Check to see if port 23 (telnet) is open
-    if not result['TCP_23']:
+    if not result['tcp_23']:
         log('Port 23 is closed on %s' % ip, ip=ip, proc=proc, v=logging.I)
     elif port is None or port is 23:
         for cred in _credList:
@@ -113,7 +120,9 @@ def start_cli_session(handler=None,
                     secret=cred['password'],
                 )
                 
-                result['cred'] = cred
+                result['username'] = cred['username']
+                result['password'] = cred['password']
+                result['cred_type'] = cred['cred_type']
                 log('Successful ssh auth to %s using %s, %s' % (ip, cred['username'], cred['password'][:2]), ip=ip, proc=proc, v=logging.N)
                 
                 return result

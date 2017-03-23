@@ -56,7 +56,7 @@ def run_audit(csv_path):
     find out which rogue AP's are physically connected to your network.
     '''
     
-    if config.cc['modified'] is False:
+    if config.cc.modified is False:
         config.parse_config()
     
     # Open the input CSV
@@ -102,7 +102,7 @@ def write_report(rows):
     from datetime import datetime
     ddb= device_db()
     
-    path= os.path.join(config.run_path(), 'mac_audit_report.txt')
+    path= os.path.join(config.cc.run_path, 'mac_audit_report.txt')
     with open(path, 'w') as outfile:
         outfile.write(textwrap.dedent('''\
             Title:  Rogue Device Report
@@ -113,7 +113,7 @@ def write_report(rows):
                     device (such as a phone) is the most likely interface to be 
                     directly connected to the matched MAC.
             
-            '''.format(datetime.now().strftime(config.pretty_time()))))
+            '''.format(datetime.now().strftime(config.cc.pretty_time))))
         
         for x in rows:
             # Get the neighbors
@@ -140,7 +140,7 @@ def write_report(rows):
     
                         
 def write_csv(rows):
-    path= os.path.join(config.run_path(), 'mac_audit.csv')
+    path= os.path.join(config.cc.run_path, 'mac_audit.csv')
     with open(path, 'w', newline='') as outfile:
         
         keys= [k for k, v in rows[0].items()]

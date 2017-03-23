@@ -95,7 +95,7 @@ def main(argv=None): # IGNORE:C0111
         # Process arguments
         args = parser.parse_args()
 
-        config.set_verbosity(args.verbose)
+        config.cc.verbosity= args.verbose
         
         locate(args.macs)
 

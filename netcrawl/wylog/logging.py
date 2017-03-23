@@ -60,11 +60,11 @@ def log(msg, **kwargs):
     ip= kwargs.get('ip', '') 
     error=  kwargs.get('error')
     print_out= kwargs.get('print_out', True)
-    log_path = kwargs.get('log_path', config.log_path())
+    log_path = kwargs.get('log_path', config.cc.log_path)
     new_log = kwargs.get('new_log', False)
     
     # Skip debug messages (unless turned on)
-    if (v >= 5) and (config.debug() is False): return False 
+    if (v >= 5) and (config.cc.debug is False): return False 
     
     msg= str(msg)
     
@@ -77,7 +77,7 @@ def log(msg, **kwargs):
     
     try:
         output = '{_proc:20}, {_msg}, {_time}, {_ip:15}, {_error}'.format(
-                    _time= datetime.now().strftime(config.pretty_time()),
+                    _time= datetime.now().strftime(config.cc.pretty_time),
                     _proc= str(proc),
                     _msg = msg.replace(',', ';'),
                     _ip = str(ip),
@@ -88,11 +88,11 @@ def log(msg, **kwargs):
     
     # Print the message to console            
     try: 
-        if v <=  config.verbosity() and print_out: print('{:<35.35}: {}'.format(proc, msg))
+        if v <=  config.cc.verbosity and print_out: print('{:<35.35}: {}'.format(proc, msg))
     except: pass
     
-    if not os.path.exists(config.run_path()):
-        os.makedirs(config.run_path())
+    if not os.path.exists(config.cc.run_path):
+        os.makedirs(config.cc.run_path)
     
     # Open the error log
     if new_log: f = open(log_path, 'w')

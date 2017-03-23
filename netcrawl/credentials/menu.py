@@ -83,7 +83,7 @@ class ModifyDevice(UserPrompt):
         print()
         _cred={'username': input('Username: '),
               'password': getpass.getpass('Password: '),
-              'type': input('Credential Type: ')
+              'cred_type': input('Credential Type: ')
              }
         
         manage.add_device_cred(_cred)
@@ -133,5 +133,5 @@ class DeleteDeviceCred(UserPrompt):
         
     
 def start():
-    config.set_verbosity(0)
+    config.cc.verbosity = 0
     MainMenu().cmdloop()

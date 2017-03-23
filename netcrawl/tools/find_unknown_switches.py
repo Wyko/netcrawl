@@ -126,7 +126,7 @@ def _get_entry_manufacturers(interf, filter, db):
     
     
 def _write_report(t):
-    path = os.path.join(config.run_path(),
+    path = os.path.join(config.cc.run_path,
                         'unknown_switches.txt')
     with open(path, 'w') as outfile:
         outfile.write(str(t))

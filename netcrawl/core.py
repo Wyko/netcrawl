@@ -1,4 +1,4 @@
-import queue, multiprocessing, traceback, nmap, json
+import queue, multiprocessing, traceback, json
 import sys, argparse, textwrap 
 from time import sleep
 
@@ -135,13 +135,18 @@ def normal_run(**kwargs):
 def process_duplicate_device(device, ddb):
     proc= 'main.process_duplicate_device'
     
-    if not ddb.unique_name_exists(device.unique_name()):
+    index = ddb.exists(unique_name= device.unique_name)
+    
+    # Return if the device is not already in the database
+    if not index:
         log('Not a duplicate record: [{}]'.format(
             device.device_name), v=logging.N, proc= proc)
         return False
     
     log('Positive Duplicate record: [{}]'.format(
             device.device_name), v=logging.N, proc= proc)
+    
+    return True
     
     
     
@@ -208,7 +213,7 @@ class worker(multiprocessing.Process):
                 self.task_queue.task_done()
                 self.result_queue.put(result)
                 
-                if config.raise_exceptions(): raise
+                if config.cc.raise_exceptions: raise
                 else: 
                     traceback.print_exc()
                     continue
@@ -230,7 +235,7 @@ class worker(multiprocessing.Process):
                 self.result_queue.put(result) 
                     
                 # Ignore CLI errors, raise the rest
-                if (config.raise_exceptions() and 
+                if (config.cc.raise_exceptions and 
                     ('CLI connection' not in str(e))): 
                     raise
                 else: 
@@ -272,6 +277,11 @@ def scan_range(_target, **kwargs):
     proc = 'main.scan_range'
      
     log('Starting host scan on target ' + _target, proc=proc, v=logging.H)
+    
+    try: import nmap
+    except ImportError:
+        log('Nmap not installed', proc= proc, v= logging.C)
+        return False
     
     nm = nmap.PortScanner()
     main_db = io_sql.main_db(**kwargs)
@@ -315,7 +325,7 @@ def single_run(target, netmiko_platform= 'unknown'):
     except Exception as e:
         device.alert(msg='Connection to {} failed: {}'.format(device.ip, str(e)), proc=proc)
         print('Device processing failed')
-        if config.raise_exceptions(): raise
+        if config.cc.raise_exceptions: raise
         return False
         
     # Output the device info to console
@@ -517,16 +527,16 @@ def main():
         proc= proc)
     
     # Set verbosity level for wylog
-    config.set_verbosity(args.v)
+    config.cc.verbosity= args.v
     
     logging.PRINT_DEBUG = args.debug
-    if args.debug: config.cc['debug']= True 
+    if args.debug: config.cc.debug= True 
     
 
     if args.manage_creds:
         menu.start()
     
-    if len(config.cc['credentials']) == 0:
+    if len(config.cc.credentials) == 0:
         print('There are no stored credentials. You must first add them with -m')
         log('There are no stored credentials. You must first add them with -m',
             v= logging.C, proc= proc)

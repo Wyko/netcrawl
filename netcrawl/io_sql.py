@@ -55,7 +55,7 @@ class sql_database():
     def __init__(self, **kwargs):
         self.clean = kwargs.get('clean', False)
         
-    def delete_database(self, db_name):
+    def delete_database(self, dbname):
         '''Deletes a database
         
         Raises:
@@ -67,13 +67,13 @@ class sql_database():
         
         proc= 'sql_database.delete_database'
         
-        if not self.database_exists(db_name):
-            log('Database [{}] does not exist'.format(db_name), v=logging.A, proc= proc)
-            raise FileExistsError('Database [{}] does not exist'.format(db_name)) 
+        if not self.database_exists(dbname):
+            log('Database [{}] does not exist'.format(dbname), v=logging.A, proc= proc)
+            raise FileExistsError('Database [{}] does not exist'.format(dbname)) 
         else:
-            log('Database [{}] exists, proceeding to delete'.format(db_name), v=logging.I, proc= proc)
+            log('Database [{}] exists, proceeding to delete'.format(dbname), v=logging.I, proc= proc)
         
-        with psycopg2.connect(**config.postgres_args()) as conn:
+        with psycopg2.connect(**config.cc.postgres.args) as conn:
             with conn.cursor() as cur, sql_logger(proc):
         
                 cur.execute('''
@@ -83,22 +83,22 @@ class sql_database():
                     
                     -- Terminate existing connections
                     SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{0}';
-                '''.format(db_name))
+                '''.format(dbname))
                 
         # Create a new isolated transaction block to drop the database                
-        with psycopg2.connect(**config.postgres_args()) as conn:
+        with psycopg2.connect(**config.cc.postgres.args) as conn:
             conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)    
             with conn.cursor() as cur, sql_logger(proc):
-                cur.execute('DROP DATABASE {0}'.format(db_name))
+                cur.execute('DROP DATABASE {0}'.format(dbname))
         
         # Check to make sure it worked
-        if not self.database_exists(db_name):
-            log('Database [{}] deleted'.format(db_name), v=logging.N, proc= proc)
+        if not self.database_exists(dbname):
+            log('Database [{}] deleted'.format(dbname), v=logging.N, proc= proc)
             return True
         
         else:
-            log('Database [{}] could not be deleted'.format(db_name), v=logging.CRITICAL, proc= proc)
-            raise IOError('Database [{}] could not be deleted'.format(db_name))
+            log('Database [{}] could not be deleted'.format(dbname), v=logging.CRITICAL, proc= proc)
+            raise IOError('Database [{}] could not be deleted'.format(dbname))
         
     
     
@@ -122,7 +122,7 @@ class sql_database():
         '''Returns true is the specified database exists'''
         proc = 'sql_database._database_exists'
         
-        with psycopg2.connect(**config.postgres_args()) as conn:
+        with psycopg2.connect(**config.cc.postgres.args) as conn:
             with conn.cursor() as cur, sql_logger(proc):
                 cur.execute("SELECT 1 from pg_database WHERE datname= %s", (db,))
                 return bool(cur.fetchone()) 
@@ -135,7 +135,7 @@ class sql_database():
         if self.database_exists(new_db):
             return True
         else:
-            with psycopg2.connect(**config.postgres_args()) as conn:
+            with psycopg2.connect(**config.cc.postgres.args) as conn:
                 conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
                 with conn.cursor() as cur, sql_logger(proc):
                     cur.execute('CREATE DATABASE {};'.format(new_db))
@@ -202,14 +202,15 @@ class main_db(sql_database):
     def __init__(self, **kwargs):
         proc = 'main_db.__init__'
         
-        self.DB_NAME = 'main'
-        
         sql_database.__init__(self, **kwargs)
         
-        try: self.create_database(self.DB_NAME)
+        # Get the database name from config
+        self.dbname= config.cc.main.name
+        
+        try: self.create_database(self.dbname)
         except FileExistsError: pass
         
-        self.conn = psycopg2.connect(**config.main_args())
+        self.conn = psycopg2.connect(**config.cc.main.args)
         self.create_table(drop_tables=self.clean)
         self.ignore_visited = kwargs.get('ignore_visited', True)
         
@@ -226,7 +227,7 @@ class main_db(sql_database):
 
     
     def __len__(self):
-        return sql_database.count(self, self.DB_NAME)
+        return sql_database.count(self, self.dbname)
     
     def count_pending(self):
         '''Counts the number of rows in the table'''
@@ -538,7 +539,7 @@ class main_db(sql_database):
         
         if not _list: _list = []
         
-        log('Adding device(s) to  table.'.format(self.DB_NAME),
+        log('Adding device(s) to  table.'.format(self.dbname),
             proc=proc, v=logging.N)
         
         # If a single device was passed, add it to the list so that we can
@@ -610,14 +611,15 @@ class device_db(sql_database):
     def __init__(self, **kwargs):
         proc = 'device_db.__init__'
         
-        self.DB_NAME = 'inventory'
-        
         sql_database.__init__(self, **kwargs)
         
-        try: self.create_database(self.DB_NAME)
+        # Get the database name from config
+        self.dbname = config.cc.inventory.name
+
+        try: self.create_database(self.dbname)
         except FileExistsError: pass
 
-        self.conn = psycopg2.connect(**config.inventory_args())
+        self.conn = psycopg2.connect(**config.cc.inventory.args)
         self.create_table(drop_tables=self.clean)
         
     
@@ -815,7 +817,7 @@ class device_db(sql_database):
             log('No devices to add', proc=proc, v=logging.A)
             return False
         
-        log('Adding device to devices table'.format(self.DB_NAME), proc=proc, v=logging.N)
+        log('Adding device to devices table'.format(self.dbname), proc=proc, v=logging.N)
         
         # Do everything in one transaction
         with self.conn, self.conn.cursor() as cur:
@@ -848,10 +850,94 @@ class device_db(sql_database):
         return device_id
     
     
-    def insert_device_entry(self, _device, cur):
-        # Trim the password
-        _password = _device.credentials.get('password', None)
-        if _password: _password = _password[:2]
+    def get_device_record(self,
+                          column,
+                          value):
+        with self.conn as conn, conn.cursor(
+            cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute('''
+                SELECT *
+                FROM devices
+                WHERE {} = %s
+                limit 1;
+            '''.format(column),
+            (value, )
+            )
+            return cur.fetchone()
+                
+    
+    def update_device_entry(self, 
+                            device, 
+                            cur,
+                            device_id= None,
+                            unique_name= None,
+                            ):
+        
+        proc= 'device_db.update_device_entry'
+        
+        # Make sure we got a valid id or name
+        if (unique_name is None and
+            device_id is None):
+            log('No name or id passed to process',
+                proc=proc, v= logging.A)
+            raise ValueError(proc+ ': No name or id passed to process')
+        
+        # Make the 'where' clause
+        where_clause= 'AND '.join(['{} = %({})s\n'.format(x, 'w'+x) for x in 
+                           ('device_id', 'unique_name')
+                           if x is not None])
+        
+        # Update the existing device into the database
+        x= cur.mogrify('''
+            UPDATE devices
+            SET
+                device_name= %(device_name)s,
+                unique_name= %(unique_name)s,
+                netmiko_platform= %(netmiko_platform)s,
+                system_platform= %(system_platform)s,
+                software= %(software)s,
+                raw_cdp= %(raw_cdp)s,
+                config= %(config)s,
+                failed= %(failed)s,
+                error_log= %(error_log)s,
+                processing_error= %(processing_error)s,
+                tcp_22= %(tcp_22)s,
+                tcp_23= %(tcp_23)s,
+                username= %(username)s,
+                password= %(password)s,
+                cred_type= %(cred_type)s,
+                updated= now()
+            WHERE 
+                {}
+            '''.format(where_clause),
+            {
+                'device_name': device.device_name,
+                'unique_name': device.unique_name,
+                'netmiko_platform': device.netmiko_platform,
+                'system_platform': device.system_platform,
+                'software': device.software,
+                'raw_cdp': device.raw_cdp,
+                'config': device.config,
+                'failed': device.failed,
+                'error_log': device.error_log,
+                'processing_error': device.processing_error,
+                'tcp_22': device.tcp_22,
+                'tcp_23': device.tcp_23,
+                'username': device.username,
+                'password': device.short_pass(),
+                'cred_type': device.cred_type,
+                # Where
+                'wdevice_id': device_id,
+                'wunique_name': unique_name,
+            })
+        
+        print(x)
+        
+        return True
+        
+    
+    
+    def insert_device_entry(self, device, cur):
        
         # Add the device into the database
         cur.execute('''
@@ -862,12 +948,12 @@ class device_db(sql_database):
                 system_platform,
                 software,
                 raw_cdp,
-                raw_config,
+                config,
                 failed,
                 error_log,
                 processing_error,
-                TCP_22,
-                TCP_23,
+                tcp_22,
+                tcp_23,
                 username,
                 password,
                 cred_type
@@ -879,12 +965,12 @@ class device_db(sql_database):
                 %(system_platform)s,
                 %(software)s,
                 %(raw_cdp)s,
-                %(raw_config)s,
+                %(config)s,
                 %(failed)s,
                 %(error_log)s,
                 %(processing_error)s,
-                %(TCP_22)s,
-                %(TCP_23)s,
+                %(tcp_22)s,
+                %(tcp_23)s,
                 %(username)s,
                 %(password)s,
                 %(cred_type)s
@@ -892,23 +978,24 @@ class device_db(sql_database):
             RETURNING device_id;
             ''',
             {
-                'device_name': _device.device_name,
-                'unique_name': _device.unique_name(),
-                'netmiko_platform': _device.netmiko_platform,
-                'system_platform': _device.system_platform,
-                'software': _device.software,
-                'raw_cdp': _device.raw_cdp,
-                'raw_config': _device.config,
-                'failed': _device.failed,
-                'error_log': _device.error_log,
-                'processing_error': _device.processing_error,
-                'TCP_22': _device.TCP_22,
-                'TCP_23': _device.TCP_23,
-                'username': _device.credentials.get('username', None),
-                'password': _password,
-                'cred_type': _device.credentials.get('type', None),
+                'device_name': device.device_name,
+                'unique_name': device.unique_name,
+                'netmiko_platform': device.netmiko_platform,
+                'system_platform': device.system_platform,
+                'software': device.software,
+                'raw_cdp': device.raw_cdp,
+                'config': device.config,
+                'failed': device.failed,
+                'error_log': device.error_log,
+                'processing_error': device.processing_error,
+                'tcp_22': device.tcp_22,
+                'tcp_23': device.tcp_23,
+                'username': device.username,
+                'password': device.short_pass(),
+                'cred_type': device.cred_type,
             })
-        return cur.fetchone()[0]
+        device.device_id= cur.fetchone()[0]
+        return device.device_id
     
     
     def insert_interface_entry(self, device_id, interf, cur):
@@ -1097,12 +1184,12 @@ class device_db(sql_database):
                         system_platform    TEXT,
                         software           TEXT,
                         raw_cdp            TEXT,
-                        raw_config         TEXT,
+                        config             TEXT,
                         failed             BOOLEAN,
                         error_log          TEXT,
                         processing_error   BOOLEAN,
-                        TCP_22             BOOLEAN,
-                        TCP_23             BOOLEAN,
+                        tcp_22             BOOLEAN,
+                        tcp_23             BOOLEAN,
                         username           TEXT,
                         password           TEXT,
                         cred_type          TEXT,
