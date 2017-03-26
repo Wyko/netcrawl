@@ -132,24 +132,6 @@ def normal_run(**kwargs):
         proc=proc, v=logging.H)
 
 
-def process_duplicate_device(device, ddb):
-    proc= 'main.process_duplicate_device'
-    
-    index = ddb.exists(unique_name= device.unique_name)
-    
-    # Return if the device is not already in the database
-    if not index:
-        log('Not a duplicate record: [{}]'.format(
-            device.device_name), v=logging.N, proc= proc)
-        return False
-    
-    log('Positive Duplicate record: [{}]'.format(
-            device.device_name), v=logging.N, proc= proc)
-    
-    return True
-    
-    
-    
 
 class worker(multiprocessing.Process):
     

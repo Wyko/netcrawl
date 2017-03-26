@@ -31,6 +31,7 @@ def fakeDevice():
     assert device.device_id == index
     
     # Close the connection to prevent too many connections accumulating
+    db.conn.commit()
     del(db)
     
     yield {'index': index,
@@ -40,7 +41,6 @@ def fakeDevice():
     # After we're done with it, delete it
     db= io_sql.device_db()
     db.delete_device_record(index)
-    assert not db.exists(device_id= index)
     
 
 def example(file):
@@ -86,6 +86,7 @@ def populated_cisco_network_device():
                            fake.word(),
                            fake.word(),
                           ])
+    
     for i in range(1, fake.random_int(1, 10)):
         nd.serial_numbers.append(fake.ios_serial())
     

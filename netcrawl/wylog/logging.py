@@ -7,7 +7,7 @@ Created on Mar 4, 2017
 from datetime import datetime
 import os, traceback, time, sys
 
-from .. import config
+from netcrawl import config
 
 
 # Variables for logging
@@ -26,22 +26,22 @@ I = 5
 DEBUG = 6
 D = 6
 
-# Where the log is stored
-LOG_PATH= os.path.dirname(__file__) + '/runtime/'
-
         
 def log(msg, **kwargs):
-    """Writes a message to the log.
+    """
+    Writes a message to the log.
     
     Args:
-        msg (string): The message to write.
+        msg (str): The message to write.
         
-    Optional Args:
-        ip (string): The IP address.
-        proc (string): The process which caused the log entry
-        log_path (string): Where to save the file
-        print_out (Boolean): If True, copies the message to console
-        v (Integer): Verbosity level. Logs with verbosity above the global 
+    Keyword Args:
+        ip (str): The IP address of whatever device we are connected to
+        proc (str): The process which caused the log entry, in the form
+            of *'module.method_name'*
+        log_path (str): The filepath of the directory where to save the 
+            log file. Uses config.cc.log_path by default
+        print_out (bool): If True, copies the message to console
+        v (int): Verbosity level. Logs with verbosity above the global 
             verbosity level will not be printed out.  
             v= 1: Critical alerts
             v= 2: Non-critical alerts
@@ -49,10 +49,11 @@ def log(msg, **kwargs):
             v= 4: Common info
             v= 5-6: Debug level info
             
-        error (Exception): 
+        error (Exception): An exception object to be included in the
+            log output
         
     Returns:
-        Boolean: True if write was successful, False otherwise.
+        bool: True if write was successful.
     """ 
     
     v = kwargs.get('v', 4)
@@ -83,8 +84,7 @@ def log(msg, **kwargs):
                     _ip = str(ip),
                     _error = str(error)
                     )
-    except Exception as e:
-        pass
+    except: pass
     
     # Print the message to console            
     try: 

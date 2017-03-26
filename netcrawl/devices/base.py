@@ -299,7 +299,7 @@ class NetworkDevice():
         log('Processing device', proc=proc, v=logging.N)
         
         # Connect to the device
-        try: result = cli.start_cli_session(handler=ConnectHandler,
+        try: result = cli.connect(handler=ConnectHandler,
                                           netmiko_platform=self.netmiko_platform,
                                           ip=self.ip,
                                           )

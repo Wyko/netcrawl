@@ -7,43 +7,49 @@ Created on Feb 28, 2017
 from netmiko import NetMikoAuthenticationException
 from netmiko import NetMikoTimeoutException
 
-from . import config
-from .util import port_is_open
-from .wylog import log, logging
+from netcrawl import config
+from netcrawl.util import port_is_open
+from netcrawl.wylog import log, logging
 
 
-def start_cli_session(handler=None,
-                      netmiko_platform=None,
-                      ip=None,
-                      cred=None,
-                      port=None):
+def connect(handler=None,
+            netmiko_platform=None,
+            ip=None,
+            cred=None,
+            port=None):
     """
-    Starts a CLI session with a remote device. Will attempt to use
-    SSH first, and if it fails it will try a terminal session.
+    Starts a CLI session with a remote device. 
     
-    Optional Args:
-        cred (Dict): If supplied. this method will only use the specified credential
-        port (Integer): If supplied, this method will connect only on this port 
-        ip (String): The IP address to connect to
-        netmiko_platform (Object): The platform of the device 
-        handler (Object): A Netmiko-type ConnectionHandler to use. Currently using
+    Uses Netmiko to start a SSH or Telnet session with a target device. It will attempt 
+    to use SSH first, and if it fails it will try Telnet. For each connection method, it
+    will attempt each credential specified in the cred argument (if specified) or the 
+    config.cc.credentials list otherwise.
+    
+    Keyword Args:
+        cred (dict): If supplied, this method will only use the specified credential. 
+            Uses the config.cc.credentials list otherwise. 
+        port (int): If supplied, this method will connect only on this port 
+        ip (str): The IP address to connect to
+        netmiko_platform (str): The platform of the device, in the Netmiko format 
+        handler (ConnectHandler): A Netmiko-type handler to use. Currently using
             one of Netmiko.ConnectHandler, Netmiko.ssh_autodetect.SSHDetect. 
             Uses Netmiko.ConnectHandler by default.
     
-    Returns: 
-        Dict: 
-            'connection': Netmiko ConnectHandler object opened to the enable prompt 
-            'tcp_22': True if port 22 is open
-            'tcp_23': True if port 23 is open
-            'username': The first successful credential's username
-            'password': The first successful credential's password
-            'cred_type': The first successful credential's type 
+    Returns:
+        dict: A dict containing:
+            - **connection** (*ConnectHandler*): A Netmiko ConnectHandler object 
+                with a successfully opened connection 
+            - **tcp_22** (*bool*): True if port 22 is open
+            - **tcp_23** (*bool*): True if port 23 is open
+            - **username** (*str*): The first successful credential's username
+            - **password** (*str*): The first successful credential's password
+            - **cred_type** (*str*): The first successful credential's type 
             
     Raises:
-        IOError: If connection could not be established
+        IOError: If a connection could not be established
         AssertionError: If error checking failed
     """
-    proc = 'cli.start_cli_session'
+    proc = 'cli.connect'
     
     log('Connecting to %s device %s' % (netmiko_platform, ip), ip=ip, proc=proc, v=logging.I)
     

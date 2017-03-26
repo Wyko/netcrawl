@@ -5,6 +5,7 @@ from psycopg2.extras import RealDictCursor
 
 from . import config
 from .wylog import log, logf, logging
+from contextlib import contextmanager
 
 
 retry_args = {'stop_max_delay': 60000,  # Stop after 60 seconds
@@ -103,10 +104,12 @@ class sql_database():
     
     
     @logf
-    def execute_sql(self, *args, proc=None):
+    def execute_sql(self, *args, proc=None, fetch= True):
         with self.conn, self.conn.cursor() as cur, sql_logger(proc):
             cur.execute(*args)
-            return cur.fetchall()
+            
+            if fetch: return cur.fetchall()
+            else: return True
         
     def execute_sql_gen(self, *args, proc= None):
         with self.conn, self.conn.cursor() as cur, sql_logger(proc):
@@ -605,6 +608,22 @@ class main_db(sql_database):
             proc=proc, v=logging.I)
         return True
     
+
+def useCursor(func):
+    '''Convenience function that creates a cursor object to pass to 
+    the wrapped method in case one wasn't passed originally'''
+    
+    def needsCursor(self, *args, **kwargs):
+        # Check if a cursor was passed
+        if 'cur' in kwargs:
+            return func(self, *args, **kwargs)
+        
+        else:
+            # Create one otherwise
+            with self.conn, self.conn.cursor() as cur:
+                return func(self, *args, **kwargs, cur=cur)
+    return needsCursor
+    
     
 class device_db(sql_database):
     
@@ -630,21 +649,20 @@ class device_db(sql_database):
     def ip_exists(self, ip):
         return sql_database.ip_exists(self, ip, 'interfaces')
     
+    @useCursor
+    def locate_mac(self, mac, cur= None):
+        cur.execute('''
+            SELECT distinct devices.device_name as device, interface_name as interface, neighbors.device_name as neighbor
+            FROM mac
+            JOIN devices ON mac.device_id=devices.device_id
+            JOIN interfaces on mac.interface_id=interfaces.interface_id
+            LEFT JOIN neighbors on mac.interface_id=neighbors.interface_id
+            WHERE mac_address = %s;
+            ''', (mac, ))
+        return cur.fetchall()
     
-    def locate_mac(self, mac):
-        with self.conn, self.conn.cursor() as cur:
-            cur.execute('''
-                SELECT distinct devices.device_name as device, interface_name as interface, neighbors.device_name as neighbor
-                FROM mac
-                JOIN devices ON mac.device_id=devices.device_id
-                JOIN interfaces on mac.interface_id=interfaces.interface_id
-                LEFT JOIN neighbors on mac.interface_id=neighbors.interface_id
-                WHERE mac_address = %s;
-                ''', (mac, ))
-            return cur.fetchall()
-    
-    
-    def delete_device_record(self, id):
+    @useCursor
+    def delete_device_record(self, id, cur= None):
         '''Removes a record from the devices table''' 
         proc = 'device_db.remove_device_record'
         
@@ -653,12 +671,11 @@ class device_db(sql_database):
             proc + ': id [{}] is not int'.format(type(id)))
         
         # Delete the entry
-        with self.conn, self.conn.cursor() as cur:
-            cur.execute('''
-                DELETE 
-                FROM devices
-                WHERE device_id = %s
-                ''', (id, ))
+        cur.execute('''
+            DELETE 
+            FROM devices
+            WHERE device_id = %s
+            ''', (id, ))
     
     
     def devices_on_subnet(self, subnet):
@@ -853,6 +870,13 @@ class device_db(sql_database):
     def get_device_record(self,
                           column,
                           value):
+        '''Get a device record based on a lookup column.
+        'WHERE column = value'
+        
+        Returns:
+            psycopg2 dict object
+        '''
+        
         with self.conn as conn, conn.cursor(
             cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute('''
@@ -864,11 +888,45 @@ class device_db(sql_database):
             (value, )
             )
             return cur.fetchone()
-                
+
+
+
+    ##############################################
+    # Update existing device
+    ##############################################
+    def process_duplicate_device(self, device):
+        ''' Parent method for handeling an existing device which
+        needs to be updated. 
+        
+        1. Determine if the device actually exists (unique_name), 
+            and get the device_id
+        2. Overwrite all entries in the device with the new device
+        3. Set a new updated time for all dependent tables
+        4. Delete any interfaces and serials which no longer exist
+        5. Add any new interfaces and serials
+        6. Add any new MAC addresses
+        7. Update any newly non-existent MAC addresses
+        '''
+        
+        proc= 'main.process_duplicate_device'
+        
+        index = self.exists(unique_name= device.unique_name)
+        
+        # Return if the device is not already in the database
+        if not index:
+            log('Not a duplicate record: [{}]'.format(
+                device.device_name), v=logging.I, proc= proc)
+            return False
+        
+        log('Positive Duplicate record: [{}]'.format(
+                device.device_name), v=logging.N, proc= proc)
+        
+        self.update_device_entry()
+        return True
     
-    def update_device_entry(self, 
-                            device, 
-                            cur,
+    
+    @useCursor
+    def update_device_entry(self, device, cur,
                             device_id= None,
                             unique_name= None,
                             ):
@@ -883,12 +941,12 @@ class device_db(sql_database):
             raise ValueError(proc+ ': No name or id passed to process')
         
         # Make the 'where' clause
-        where_clause= 'AND '.join(['{} = %({})s\n'.format(x, 'w'+x) for x in 
-                           ('device_id', 'unique_name')
-                           if x is not None])
+        where_clause= 'AND '.join([
+            '{} = %({})s\n'.format(x, 'w'+x) for x in 
+           ('device_id', 'unique_name') if x is not None])
         
         # Update the existing device into the database
-        x= cur.mogrify('''
+        cur.execute('''
             UPDATE devices
             SET
                 device_name= %(device_name)s,
@@ -931,12 +989,46 @@ class device_db(sql_database):
                 'wunique_name': unique_name,
             })
         
-        print(x)
-        
         return True
+            
         
+    @useCursor
+    def set_dependents_as_updated(self, device_id, cur= None):
+        '''Sets the last touched time on all dependents of the
+        given device_id to now'''
+        
+        cur.execute('''
+            UPDATE interfaces
+            SET updated = now()
+            WHERE device_id = %(d)s;
+            
+            UPDATE mac
+            SET updated = now()
+            WHERE device_id = %(d)s;
+            
+            UPDATE neighbors
+            SET updated = now()
+            WHERE device_id = %(d)s;
+            
+            UPDATE serials
+            SET updated = now()
+            WHERE device_id = %(d)s;
+            
+            UPDATE neighbor_ips
+            SET updated = now()
+            WHERE neighbor_id = 
+                (SELECT neighbor_id
+                 FROM neighbors
+                 WHERE device_id = %(d)s);
+        ''', {'d': device_id})
     
     
+    
+    
+    
+    ######################################################
+    # Add new device Methods
+    ######################################################
     def insert_device_entry(self, device, cur):
        
         # Add the device into the database
@@ -1218,7 +1310,9 @@ class device_db(sql_database):
                         device_id              INTEGER NOT NULL,
                         interface_id           INTEGER NOT NULL,
                         mac_address            TEXT NOT NULL,
+                        seen_last_scan         BOOLEAN DEFAULT TRUE,
                         updated                TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        last_seen              TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
                         FOREIGN KEY(interface_id) REFERENCES Interfaces(interface_id) 
                             ON DELETE CASCADE ON UPDATE CASCADE,
                         FOREIGN KEY(device_id) REFERENCES Devices(device_id) 
