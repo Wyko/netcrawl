@@ -14,7 +14,7 @@ inventory them, and then provide useful data on the processed devices.
 Documentation
 -------------
 
-The full documentation can be found in the `NetCrawl ReadTheDocs`_ site
+The full documentation can be found at the `NetCrawl ReadTheDocs`_ site
 
 
 Features
