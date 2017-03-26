@@ -316,7 +316,7 @@ def single_run(target, netmiko_platform= 'unknown'):
     
 
 
-def parse_cli():
+def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='NetCrawl',
         formatter_class=argparse.RawTextHelpFormatter,
@@ -328,7 +328,7 @@ def parse_cli():
             integration with Nmap to discover un-connected hosts.'''))
     
     polling = parser.add_argument_group('Options')
-    scanning = parser.add_argument_group('Scan Type')
+    scanning = parser.add_argument_group('Run Type')
     action = scanning.add_mutually_exclusive_group(required=True)
     target = parser.add_argument_group('Target Specification')
     
@@ -479,8 +479,13 @@ def parse_cli():
         default='unknown'
         )
     
-    args = parser.parse_args()
+    return parser
     
+    
+def parse_cli():
+    
+    parser= make_parser()
+    args = parser.parse_args()
      
     if args.update: args.ignore_visited = True
      

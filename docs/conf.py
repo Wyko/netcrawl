@@ -157,4 +157,4 @@ texinfo_documents = [
 ]
 
 
-
+extensions += ['sphinxarg.ext']

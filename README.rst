@@ -33,8 +33,7 @@ Features
 Usage
 -----
 ::
-	usage: NetCrawl [-h] [-v LEVEL] [-m] [-i] [-u] [-d] [-c] [-sd] [-sR] [-sS]
-	                [-sN] [-t TARGET] [-p PLATFORM]
+	usage: NetCrawl [-h] [-v LEVEL] [-m] [-i] [-u] [-d] [-c] [-sd] [-sR] [-sS] [-sN] [-t TARGET] [-p PLATFORM]
 	
 	optional arguments:
 	  -h, --help            show this help message and exit
@@ -59,8 +58,7 @@ Usage
 	                            ignored anyway. If Debug is enabled and V is less than 5,
 	                            debug messages will only be printed to the log file.
 	  -c, --clean           Delete all existing database entries and rebuild the databases.
-	  -sd, --skip-named-duplicates
-	                        If a CDP entry has the same host name as a previously visited device, ignore it.
+	  -sd, --skip-named-duplicates	                        If a CDP entry has the same host name as a previously visited device, ignore it.
 	
 	Scan Type:
 	  -m                    Credential management. Use as only argument.

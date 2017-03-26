@@ -14,3 +14,14 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
+
+Usage
+=====
+
+.. argparse::
+   :module: netcrawl.core
+   :func: make_parser
+   :prog: NetCrawl
+   :nodefault:
+
