@@ -37,8 +37,8 @@ def connect(handler=None,
     
     Returns:
         dict: A dict containing:
-            - **connection** (*ConnectHandler*): A Netmiko ConnectHandler object 
-                with a successfully opened connection 
+        
+            - **connection** (*ConnectHandler*): A Netmiko ConnectHandler object with a successfully opened connection 
             - **tcp_22** (*bool*): True if port 22 is open
             - **tcp_23** (*bool*): True if port 23 is open
             - **username** (*str*): The first successful credential's username

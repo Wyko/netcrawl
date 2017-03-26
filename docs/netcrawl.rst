@@ -1,4 +1,4 @@
-netcrawl package
+NetCrawl
 ================
 
 Subpackages

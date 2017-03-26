@@ -2,6 +2,7 @@ from datetime import datetime
 import re, hashlib, os
 from time import sleep
 
+from prettytable import PrettyTable
 from netmiko import ConnectHandler
 
 from .. import config, util, cli
@@ -183,39 +184,36 @@ class NetworkDevice():
     def neighbor_table(self, sh_src=True, sh_name=True, sh_ip=True, sh_platform=True):
         """Returns a formatted table of neighbors.
         
-        Optional Args:
-            sh_src (Boolean): When true, show the source interface for each entry
-            sh_name (Boolean): When true, show the hostname for each entry
-            sh_ip (Boolean): When true, show the IP address for each entry
-            sh_platform (Boolean): When true, show the system platform for each entry
+        Keyword Args:
+            sh_src (bool): When true, show the source interface for each entry
+            sh_name (bool): When true, show the hostname for each entry
+            sh_ip (bool): When true, show the IP address for each entry
+            sh_platform (bool): When true, show the system platform for each entry
             
         """ 
         
-        output = ''
-        
-        entries = []
+        pt = PrettyTable()
         
         # Add the table header
-        entry = ''
-        if sh_name: entry += '     {name:^30}  '.format(name='Neighbor Name')
-        if sh_src: entry += '{src:^25} '.format(src='Source Interface')
-        if sh_platform: entry += '{platform:^20} '.format(platform='Platform')
-        if sh_ip: entry += '{ip:^30} '.format(ip='IP')
-        entries.append(entry)
+        names=[]
+        if sh_name: names.append('Neighbor Name')
+        if sh_src: names.append('Source Interface')
+        if sh_platform: names.append('Platform')
+        if sh_ip: names.append('IP Address')
+        
+        pt.field_names= names
         
         # Populate the table
         for n in self.all_neighbors():
-            entry = '-- '
-            if sh_name: entry += '{name:30.29}, '.format(name=n['device_name'])
-            if sh_src: entry += '{src:25}, '.format(src=n['source_interface'])
-            if sh_platform: entry += '{platform:23}, '.format(platform=n['system_platform'])
-            if sh_ip: entry += '{ip} '.format(ip=str(n['ip_list']))
-            entries.append(entry)
+            entry = []
+            if sh_name: entry.append(n['device_name'])
+            if sh_src: entry.append(n['source_interface'])
+            if sh_platform: entry.append(n['system_platform'])
+            if sh_ip: entry.append(', '.join(set(n['ip_list'])))
+            pt.add_row(entry)
         
-        entries.append('\n* Un-Matched source interface')
-        output += '\n'.join(entries)
-        
-        return output
+        pt.align= 'l'
+        return str(pt)
         
     
     def merge_interfaces(self, new_interfaces):
