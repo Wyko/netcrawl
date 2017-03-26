@@ -103,3 +103,4 @@ ENV/
 /~/
 /dist/
 /.coverage
+/README.md
