@@ -11,7 +11,7 @@ Network Information Gathering Made Easy
 Netcrawl is a tool designed to discover and poll one or more devices,
 inventory them, and then provide useful data on the processed devices.
 
-The full documentation can be found in the 'NetCrawl ReadTheDocs'_ site
+The full documentation can be found in the `NetCrawl ReadTheDocs`_ site
 
 
 Features
@@ -101,7 +101,7 @@ Authors
 * **Wyko ter Haar** - *Initial work* - Wyko_
    
 
-.. _'NetCrawl ReadTheDocs': http://netcrawl.readthedocs.io/en/latest/
+.. _`NetCrawl ReadTheDocs`: http://netcrawl.readthedocs.io/en/latest/
 .. _Wyko: https://github.com/Wyko   
 .. _Manuf: https://github.com/coolbho3k/manuf
 .. _Netmiko: https://github.com/ktbyers/netmiko
