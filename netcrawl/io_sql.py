@@ -998,6 +998,10 @@ class device_db(sql_database):
         given device_id to now'''
         
         cur.execute('''
+            UPDATE devices
+            SET updated = now()
+            WHERE device_id = %(d)s;
+            
             UPDATE interfaces
             SET updated = now()
             WHERE device_id = %(d)s;

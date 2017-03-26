@@ -7,7 +7,9 @@ Created on Mar 21, 2017
 from netcrawl import config, core, io_sql
 from faker import Faker
 from tests import helpers
+import pytest
 
+@pytest.mark.xfail(reason='Duplicate device processing not enabled yet')
 def test_process_duplicate_device():
     
     # Connect to the database

@@ -59,6 +59,13 @@ def test_set_dependents_as_updated():
         
 
 def test_time_in_sql():
+    ''' Test whether updating the time works when you manually
+    update it with execute SQL. This was done because, for some
+    reason, the 'set_dependents_as_updated' method was failing
+    while this wasn't. (Ended up that I had forgotten to actually
+    update the devices table among everything else...)
+    '''
+    
     with fakeDevice() as f:
         db= io_sql.device_db()
         record= db.get_device_record('device_id', f['index'])

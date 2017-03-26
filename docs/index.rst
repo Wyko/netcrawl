@@ -1,5 +1,5 @@
-Welcome to netcrawl's documentation!
-====================================
+Netcrawl: Network Information Gathering made Easy!
+==================================================
 
 .. toctree::
    :maxdepth: 2
