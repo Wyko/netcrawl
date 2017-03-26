@@ -90,7 +90,7 @@ def populated_cisco_network_device():
     for i in range(1, fake.random_int(1, 10)):
         nd.serial_numbers.append(fake.ios_serial())
     
-    nd.config= fake.text(max_nb_chars=fake.random_int())
+    nd.config= fake.text(max_nb_chars=fake.random_int(min=5))
     
     return nd
             
