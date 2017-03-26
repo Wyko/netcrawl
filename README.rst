@@ -11,6 +11,9 @@ Network Information Gathering Made Easy
 Netcrawl is a tool designed to discover and poll one or more devices,
 inventory them, and then provide useful data on the processed devices.
 
+Documentation
+-------------
+
 The full documentation can be found in the `NetCrawl ReadTheDocs`_ site
 
 
