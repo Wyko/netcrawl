@@ -1,11 +1,17 @@
-Netcrawl: Network Information Gathering made Easy!
+Netcrawl
+Network Information Gathering made Easy!
 ==================================================
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-   
-   netcrawl
+    :maxdepth: 2
+    :caption: Contents:
+
+    netcrawl
+    netcrawl.credentials
+    netcrawl.devices
+    netcrawl.tools
+    netcrawl.wylog
+    
 
 
 Indices and tables
