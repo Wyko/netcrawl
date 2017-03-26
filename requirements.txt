@@ -1,4 +1,4 @@
--e git+https://github.com/ktbyers/netmiko.git@395c746c76083f31ad1f306780de1e789ac5dbcf#egg=netmiko
+netmiko
 python-nmap
 keyring
 keyrings.alt
