@@ -6,15 +6,13 @@ Created on Mar 15, 2017
 
 import os, pytest
 from tests import helpers
-from netcrawl.devices import CiscoDevice
 
 @pytest.fixture(params=helpers.get_example_dir('ios_show_inv'))
 def next_example(request):
     return request.param
                         
 def test_cisco_parse_serials(next_example):
-    cd = CiscoDevice()
-    helpers.populate_network_device(cd)
+    cd= helpers.populated_cisco_network_device()
 
     for f in helpers.get_example_dir('ios_show_inv'):
         parse= cd._parse_serials(next_example)

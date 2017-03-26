@@ -2,6 +2,7 @@ from datetime import datetime
 import re, hashlib, os
 from time import sleep
 
+from prettytable import PrettyTable
 from netmiko import ConnectHandler
 
 from .. import config, util, cli
@@ -63,15 +64,18 @@ class NetworkDevice():
         self.connection = kwargs.pop('connection', None)
         self.AD_enabled = kwargs.pop('AD_enabled', None)
         self.device_id = kwargs.pop('device_id', None)
+        self.cred_type= kwargs.pop('cred_type', None)
         self.software = kwargs.pop('software', None)
+        self.username= kwargs.pop('username', None)
+        self.password= kwargs.pop('password', None)
         self.raw_cdp = kwargs.pop('raw_cdp', None)
+        self.updated = kwargs.pop('updated', None)
         self.config = kwargs.pop('config', None)
-        self.TCP_22 = kwargs.pop('TCP_22', None)
-        self.TCP_23 = kwargs.pop('TCP_23', None)
+        self.tcp_22 = kwargs.pop('tcp_22', None)
+        self.tcp_23 = kwargs.pop('tcp_23', None)
         self.ip = kwargs.pop('ip', None)
         
         # Mutable arguments
-        self.credentials = kwargs.pop('credentials', {})
         self.mac_address_table = []
         self.serial_numbers = []
         self.interfaces = []
@@ -82,13 +86,33 @@ class NetworkDevice():
         self.processing_error = False
         self.failed = False
         self.error_log = ''
+    
+    def credentials(self,
+                    username= None,
+                    password= None,
+                    cred_type= None):
+        '''Gets or sets the last successful credential used
+        to log in to the device'''
         
+        if (username is None and 
+            password is None and
+            type is None):
+            return {'username': self.username,
+                    'password': self.password,
+                    'cred_type': self.cred_type
+                    }
+            
+        self.username= username
+        self.password = password
+        self.cred_type = type
+        return True    
+            
         
     def __str__(self):
         
         return '\n'.join([
             'Device Name:       ' + str(self.device_name),
-            'Unique Name:       ' + str(self.unique_name()),
+            'Unique Name:       ' + str(self.unique_name),
             'Management IP:     ' + str(self.ip),
             'First Serial:      ' + self.first_serial_str(),
             'Serial Count:      ' + str(len(self.serial_numbers)),
@@ -98,6 +122,13 @@ class NetworkDevice():
             'Config Size:       ' + str(len(self.config))
             ])
     
+    
+    def short_pass(self):
+        # Trim the password
+        if self.password: 
+            return self.password[:2]
+        else:
+            return None
     
     
     def alert(self, msg, proc, failed=False, v=logging.A, ip=None):
@@ -121,21 +152,21 @@ class NetworkDevice():
  
     def save_config(self):
         proc = 'base_device.save_config'
-        log('Saving config.', proc=proc, v=logging.I)
+        log('Saving config', proc=proc, v=logging.I)
         
-        path = os.path.join(config.device_path(), self.unique_name()) 
-        filename = datetime.now().strftime(config.file_time()) + '.cfg'
+        if not self.config: raise ValueError('Config [{}] was empty'.format(self.config))
+        
+        path = os.path.join(config.cc.devices_path, self.unique_name) 
+        
+        filename = os.path.join(path, datetime.now().strftime(config.cc.file_time) + '.cfg')
         
         if not os.path.exists(path):
             os.makedirs(path)
         
-        with open(path + filename, 'a') as outfile:       
-            outfile.write('\n'.join([
-                datetime.now().strftime(config.file_time()),
-                self.config,
-                '\n']))
+        with open(filename, 'w') as outfile:       
+            outfile.write(self.config)
                 
-        log('Saved config.', proc=proc, v=logging.N)
+        log('Saved config', proc=proc, v=logging.N)
     
     
     def all_neighbors(self):
@@ -153,39 +184,36 @@ class NetworkDevice():
     def neighbor_table(self, sh_src=True, sh_name=True, sh_ip=True, sh_platform=True):
         """Returns a formatted table of neighbors.
         
-        Optional Args:
-            sh_src (Boolean): When true, show the source interface for each entry
-            sh_name (Boolean): When true, show the hostname for each entry
-            sh_ip (Boolean): When true, show the IP address for each entry
-            sh_platform (Boolean): When true, show the system platform for each entry
+        Keyword Args:
+            sh_src (bool): When true, show the source interface for each entry
+            sh_name (bool): When true, show the hostname for each entry
+            sh_ip (bool): When true, show the IP address for each entry
+            sh_platform (bool): When true, show the system platform for each entry
             
         """ 
         
-        output = ''
-        
-        entries = []
+        pt = PrettyTable()
         
         # Add the table header
-        entry = ''
-        if sh_name: entry += '     {name:^30}  '.format(name='Neighbor Name')
-        if sh_src: entry += '{src:^25} '.format(src='Source Interface')
-        if sh_platform: entry += '{platform:^20} '.format(platform='Platform')
-        if sh_ip: entry += '{ip:^30} '.format(ip='IP')
-        entries.append(entry)
+        names=[]
+        if sh_name: names.append('Neighbor Name')
+        if sh_src: names.append('Source Interface')
+        if sh_platform: names.append('Platform')
+        if sh_ip: names.append('IP Address')
+        
+        pt.field_names= names
         
         # Populate the table
         for n in self.all_neighbors():
-            entry = '-- '
-            if sh_name: entry += '{name:30.29}, '.format(name=n['device_name'])
-            if sh_src: entry += '{src:25}, '.format(src=n['source_interface'])
-            if sh_platform: entry += '{platform:23}, '.format(platform=n['system_platform'])
-            if sh_ip: entry += '{ip} '.format(ip=str(n['ip_list']))
-            entries.append(entry)
+            entry = []
+            if sh_name: entry.append(n['device_name'])
+            if sh_src: entry.append(n['source_interface'])
+            if sh_platform: entry.append(n['system_platform'])
+            if sh_ip: entry.append(', '.join(set(n['ip_list'])))
+            pt.add_row(entry)
         
-        entries.append('\n* Un-Matched source interface')
-        output += '\n'.join(entries)
-        
-        return output
+        pt.align= 'l'
+        return str(pt)
         
     
     def merge_interfaces(self, new_interfaces):
@@ -231,8 +259,8 @@ class NetworkDevice():
             
         return output
 
-
-    def unique_name(self, name=True, serials=True):
+    @property
+    def unique_name(self):
         """Returns a unique identifier for this device"""
         
         if not (self.device_name or self.serial_numbers):
@@ -240,10 +268,10 @@ class NetworkDevice():
         
         output = []
         
-        if name and self.device_name: output.append(self.device_name)
+        if self.device_name and self.device_name: output.append(self.device_name)
         
         # Make a hash of the serials        
-        if serials and len(self.serial_numbers) > 0:
+        if self.serial_numbers and len(self.serial_numbers) > 0:
             h = hashlib.md5()
             for x in sorted(self.serial_numbers, key=lambda k: k['serialnum']):
                 h.update(x['serialnum'].encode())
@@ -256,11 +284,11 @@ class NetworkDevice():
         if len(self.serial_numbers) == 0: 
             return None
         
-        else: 
-            return ', '.join([x + ': ' + y  
-                                for x, y 
-                                in self.serial_numbers[0]['serialnum']])
-          
+        else: return ', '.join(
+                        ['{}: [{}]'.format(x.title(), y)  
+                        for x, y 
+                        in self.serial_numbers[0].items()])
+      
     
     def process_device(self):
         '''Main method which fully populates the network_device'''
@@ -269,7 +297,7 @@ class NetworkDevice():
         log('Processing device', proc=proc, v=logging.N)
         
         # Connect to the device
-        try: result = cli.start_cli_session(handler=ConnectHandler,
+        try: result = cli.connect(handler=ConnectHandler,
                                           netmiko_platform=self.netmiko_platform,
                                           ip=self.ip,
                                           )
@@ -283,9 +311,12 @@ class NetworkDevice():
         
         # Import results of CLI connection into device variables
         self.connection = result['connection']
-        self.TCP_22 = result['TCP_22']
-        self.TCP_23 = result['TCP_23']
-        self.credentials = result['cred']
+        self.tcp_22 = result['tcp_22']
+        self.tcp_23 = result['tcp_23']
+        self.username= result['username']
+        self.password= result['password']
+        self.cred_type= result['cred_type']
+        
         
         # Functions that must work consecutively in order to proceed
         # On error, these raise an exception and fail the processing
@@ -318,10 +349,10 @@ class NetworkDevice():
                     fn()
             except Exception as e:
                 self.alert(fn.__name__ + ' - Error: ' + str(e), proc=proc)
-                if config.raise_exceptions(): raise
+                if config.cc.raise_exceptions: raise
                
         
-        log('Finished polling {}'.format(self.unique_name()), proc=proc, v=logging.H)
+        log('Finished polling {}'.format(self.unique_name), proc=proc, v=logging.H)
         self.connection.disconnect()
         self.connection = None
         return True

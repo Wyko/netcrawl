@@ -19,11 +19,11 @@ def test_log_is_in_running_directory():
     log('Pytest log entry', proc= 'test_log_is_in_running_directory')
     
     assert os.path.isfile(os.path.join(
-        config.run_path(),
+        config.cc.run_path,
         'log.txt'))
 
 def test_log_snip_actually_logs_something(capsys):
-    logging.VERBOSITY = logging.NORMAL
+    config.cc.verbosity= logging.NORMAL
     
     with log_snip('test_log_snip_actually_logs_something', 
                   logging.NORMAL):

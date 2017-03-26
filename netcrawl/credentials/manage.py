@@ -14,7 +14,7 @@ from ..wylog import logging, log
 
 def _get_fernet_key(app_name= 'netcrawl',
                     username= 'netcrawl'):
-    proc= 'config._get_fernet_key'
+    proc= 'manage._get_fernet_key'
     
     # Retrieve the encryption key from storage or generate one
     key= keyring.get_password(app_name, username)
@@ -32,31 +32,31 @@ def _get_fernet_key(app_name= 'netcrawl',
 
 def _write_vault_data(data):
     '''Overwrites all stored data with the new data'''
-    proc= 'config.write_vault_data'
+    proc= 'manage.write_vault_data'
     
     f= _get_fernet_key()
     
-    with open(config.vault_path(), 'w+b') as outfile:
+    with open(config.cc.vault_path, 'w+b') as outfile:
         outfile.write(f.encrypt(bytes(str(data), encoding='utf-8')))
         
     
 def _get_vault_data():
-    proc= 'config.get_vault_data'
+    proc= 'manage.get_vault_data'
     
     # Create the vault if needed
-    if not os.path.isfile(config.vault_path()):
+    if not os.path.isfile(config.cc.vault_path):
         log('Creating Vault in [{}]'.format(
-            config.vault_path()), 
+            config.cc.vault_path), 
             proc=proc, v=logging.I)
-        with open(config.vault_path(), 'w+b'): pass
+        with open(config.cc.vault_path, 'w+b'): pass
     
-    with open(config.vault_path(), 'r+b') as outfile:
+    with open(config.cc.vault_path, 'r+b') as outfile:
         raw_vault= outfile.read()
     
     # Check for an empty dictionary
     if len(raw_vault) <= 1:
         log('Vault empty in[{}]'.format(
-            config.vault_path()), 
+            config.cc.vault_path), 
             proc=proc, v=logging.I)
         return _validate_vault(None)
         
@@ -68,8 +68,9 @@ def _get_vault_data():
             proc=proc, v=logging.A)
         return _validate_vault(None)
     else:
-        # Translate the decrypted text into a dict, then
-        # validate it and return it
+        
+        # Translate the decrypted text into a dict 
+        # then validate it and return it
         return _validate_vault(
             ast.literal_eval(
                 str(output, encoding='utf-8')))    
@@ -90,7 +91,7 @@ def get_database_cred():
         
         # Return the default credentials for Travis CI. They're good as any.
         return {'username': 'postgres',
-                'password': None}
+                'password': ''}
     
     return _vault['database'] 
 
@@ -106,8 +107,8 @@ def delete_device_cred(_cred=None, index= None):
     
     elif _cred is not None:
         for x in _vault['device_creds']:
-            if all((_cred['username'].lower() == x['username'].lower()),
-                   (_cred['password'] == x['password'])):
+            if ((_cred['username'].lower() == x['username'].lower()) and
+                (_cred['password'] == x['password'])):
                 _vault['device_creds'].remove(x)
                 print('Removed ' + _cred['username'])
     
@@ -115,10 +116,11 @@ def delete_device_cred(_cred=None, index= None):
                 
 
 def list_creds():
-    '''Lists the device credentials in secure form'''
+    '''Lists all credentials in secure form'''
     output= _get_vault_data()
     if output is None: return ''
     
+    # List database 
     if any([output['database']['password'] is None,
            output['database']['username'] is None]):
         f_output= 'No Database credentials stored.\n'
@@ -127,6 +129,7 @@ def list_creds():
         f_output= '>> Database Username: {}\n   Hashed Password: {}\n\n'.format(
             output['database']['username'], output['database']['password'])
     
+    # List device creds
     if len(output['device_creds']) == 0:
         f_output+=('No device credentials stored.\n')
     else:
@@ -134,7 +137,7 @@ def list_creds():
             # Hash the password and trim to 8 characters
             c['password']= hashlib.md5(c['password'].encode()).hexdigest()[:8]
             f_output+= '{}) Username: {}\n   Hashed Password: {}\n   Type: {}\n'.format(
-                i, c['username'], c['password'], c['type'])
+                i, c['username'], c['password'], c['cred_type'])
         
     return f_output
         
@@ -147,14 +150,15 @@ def _write_device_creds(_creds):
     
     
 def add_device_cred(_cred):
-    if (isinstance(_cred, dict) and
-        all (k in _cred for k in ('username',
+    # Error checking
+    assert isinstance(_cred, dict)
+    assert all (k in _cred for k in ('username',
                                   'password',
-                                  'type',))):
+                                  'cred_type',))
     
-        _vault= _get_vault_data()
-        _vault['device_creds'].append(_cred)
-        _write_vault_data(_vault)
+    _vault= _get_vault_data()
+    _vault['device_creds'].append(_cred)
+    _write_vault_data(_vault)
     
     
 def write_database_cred(_cred):

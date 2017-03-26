@@ -4,6 +4,7 @@ from netcrawl import io_sql, util, config
 import textwrap
 from netcrawl.io_sql import device_db
 from netcrawl.tools.manuf.manuf import MacParser
+from prettytable import PrettyTable
 
 
 def _open_csv(_path):
@@ -55,7 +56,7 @@ def run_audit(csv_path):
     find out which rogue AP's are physically connected to your network.
     '''
     
-    if config.cc['modified'] is False:
+    if config.cc.modified is False:
         config.parse_config()
     
     # Open the input CSV
@@ -99,46 +100,48 @@ def run_audit(csv_path):
 
 def write_report(rows):
     from datetime import datetime
-    
     ddb= device_db()
     
-    with open(os.path.join(config.run_path(), 'mac_audit_report.txt'), 'w') as outfile:
+    path= os.path.join(config.cc.run_path, 'mac_audit_report.txt')
+    with open(path, 'w') as outfile:
         outfile.write(textwrap.dedent('''\
             Title:  Rogue Device Report
             Time:   {}
             
-            Note 1: In the neighbor table for each match, the interface with no 
+            Note: In the neighbor table for each match, the interface with no 
                     neighbor or a neighbor which is an obvious non-network 
                     device (such as a phone) is the most likely interface to be 
                     directly connected to the matched MAC.
             
-            '''.format(datetime.now().strftime(config.pretty_time()))))
+            '''.format(datetime.now().strftime(config.cc.pretty_time))))
         
         for x in rows:
             # Get the neighbors
-            located= ddb.locate_mac(x['wired_mac'])
-            result= '-'*50 + '\n\n'
+            locations= ddb.locate_mac(x['wired_mac'])
+            result=  '\n\n'
             
             result+= '{:12}: {}\n'.format('Matched Mac', x.pop('mac'))
-            result+= '{:12}: {}\n'.format('Wired Mac', x.get('wired_mac'))
+            result+= '{:12}: {}\n'.format('Wired Mac', x.pop('wired_mac'))
             result+= '{:12}: {}\n'.format('Confidence', x.pop('confidence'))
             result+= '{:12}: {}\n'.format('Manufacturer', x.pop('Manufacturer'))
 
             result+= '\n'.join(['{:12}: {}'.format(k, v) for k, v in sorted(x.items())])
-            result+= '\n\n{:^97}'.format('-- Where this MAC was seen --')
-            result+= '\n{:^30} | {:^30} | {:^30} |\n'.format('Device', 'Interface', 'Neighbor')
+            result+= '\n\nWhere this MAC was seen:\n'
             
-            for loc in located:
-                result+= '{:30} | {:30} | {:30} |\n'.format(str(loc[0]),
-                                                            str(loc[1]),
-                                                            str(loc[2]))
-            result+= '\n'
+            t = PrettyTable(['Device Name', 'Interface', 'Neighbors'])
+            t.align = 'l'
+
+            for match in locations: t.add_row(match)
+            
+            result+= str(t) + '\n'
                 
             outfile.write(result)
+    print('Finished writing report to [{}]'.format(path))
     
                         
 def write_csv(rows):
-    with open(os.path.join(config.run_path(), 'mac_audit.csv'), 'w', newline='') as outfile:
+    path= os.path.join(config.cc.run_path, 'mac_audit.csv')
+    with open(path, 'w', newline='') as outfile:
         
         keys= [k for k, v in rows[0].items()]
                   
@@ -146,7 +149,7 @@ def write_csv(rows):
         writer.writeheader()
         for x in rows:
             writer.writerow(x)
-    
+    print('Finished writing CSV to [{}]'.format(path))
     
 def sort_csv_by_subnet(csv_rows):
     '''Takes a list of dicts with 'network_ip' and 'mac' 
@@ -195,7 +198,14 @@ def evaluate_mac(mac1, mac2):
         
      
 if __name__ == '__main__':
-    run_audit(r"E:\rogue_joined.csv")
+    import argparse
+    config.parse_config()
+    
+    parser = argparse.ArgumentParser(description='Perform an audit of MACs on the network')
+    parser.add_argument('csv', help='A csv file to audit.')
+    args = parser.parse_args()
+    
+    run_audit(args.csv)
         
         
         

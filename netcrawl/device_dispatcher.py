@@ -87,7 +87,7 @@ def autodetect(target):
         assert type(target) is str, proc + ': Target [{}] is not a string'.format(type(target))
         
         # Connect using the SSH autodetect system
-        try: connection = cli.start_cli_session(ip=target,
+        try: connection = cli.connect(ip=target,
                                                handler=SSHDetect,
                                                netmiko_platform='autodetect'
                                                )['connection']

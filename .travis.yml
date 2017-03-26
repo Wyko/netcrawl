@@ -2,19 +2,22 @@ language: python
 python:
 #  - "2.6"
 #  - "2.7"
+#  - "3.6-dev" # 3.6 development branch
+#  - "3.7-dev" # 3.7 development branch
   - "3.5"
-  - "3.6-dev" # 3.6 development branch
-  - "3.7-dev" # 3.7 development branch
-  - "nightly" # currently points to 3.7-dev
   - "3.6"
+  - "nightly" # currently points to 3.7-dev
   
+sudo: required
+dist: trusty
+addons:
+    postgresql: "9.6"
 services:
-  - postgresql
+    - postgresql
   
 # command to install dependencies
 install:
   - pip install .
-  - pip install -U keyrings.alt
   - pip install pytest-cov coveralls
   - pip install -r requirements.txt
   
@@ -27,6 +30,7 @@ script:
 os:
   - linux
 #  - osx
+
 
 matrix:
   allow_failures:

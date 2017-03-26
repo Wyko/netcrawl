@@ -5,6 +5,7 @@ from psycopg2.extras import RealDictCursor
 
 from . import config
 from .wylog import log, logf, logging
+from contextlib import contextmanager
 
 
 retry_args = {'stop_max_delay': 60000,  # Stop after 60 seconds
@@ -52,69 +53,92 @@ class sql_logger():
 
 
 class sql_database():
-    def __init__(self, dbname, **kwargs):
-        # Create the tables in each database, overwriting if needed
+    def __init__(self, **kwargs):
         self.clean = kwargs.get('clean', False)
-        self.create_database(dbname)
         
-    
-    """
-    def delete_database(self, db_name, cur= None):
-        '''Very much deletes a database'''
+    def delete_database(self, dbname):
+        '''Deletes a database
+        
+        Raises:
+            FileExistsError: If the database to be deleted 
+                does not exist.
+            IOError: If the database could not be deleted and 
+                still exists after execution
+        '''
+        
         proc= 'sql_database.delete_database'
         
-        def _execute(db_name, cur):
-            # Make sure the database exists
-            cur.execute("SELECT 1 from pg_database WHERE datname= %s", (db_name, ))
-            
-            if not cur.fetchone(): 
-                log('Database [{}] does not exist'.format(db_name), v=logging.I, proc= proc)
-                return False 
-            
-            cur.execute('''
-                -- Disallow new connections
-                UPDATE pg_database SET datallowconn = 'false' WHERE datname = '{0}';
-                ALTER DATABASE {0} CONNECTION LIMIT 1;
+        if not self.database_exists(dbname):
+            log('Database [{}] does not exist'.format(dbname), v=logging.A, proc= proc)
+            raise FileExistsError('Database [{}] does not exist'.format(dbname)) 
+        else:
+            log('Database [{}] exists, proceeding to delete'.format(dbname), v=logging.I, proc= proc)
+        
+        with psycopg2.connect(**config.cc.postgres.args) as conn:
+            with conn.cursor() as cur, sql_logger(proc):
+        
+                cur.execute('''
+                    -- Disallow new connections
+                    UPDATE pg_database SET datallowconn = 'false' WHERE datname = '{0}';
+                    ALTER DATABASE {0} CONNECTION LIMIT 1;
+                    
+                    -- Terminate existing connections
+                    SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{0}';
+                '''.format(dbname))
                 
-                -- Terminate existing connections
-                SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{0}';
-            '''.format(db_name))
-            cur.commit()
-            
-            cur.execute('DROP DATABASE {0}'.format(db_name))
+        # Create a new isolated transaction block to drop the database                
+        with psycopg2.connect(**config.cc.postgres.args) as conn:
+            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)    
+            with conn.cursor() as cur, sql_logger(proc):
+                cur.execute('DROP DATABASE {0}'.format(dbname))
+        
+        # Check to make sure it worked
+        if not self.database_exists(dbname):
+            log('Database [{}] deleted'.format(dbname), v=logging.N, proc= proc)
             return True
         
-        if cur: 
-            return _execute(db_name, cur)
         else:
-            with psycopg2.connect(dbname='postgres', 
-                                  user='wyko', 
-                                  password='pass', 
-                                  host='localhost') as conn:
-                with conn.cursor() as cur, sql_logger(proc):
-                    return _execute(db_name, cur)
-    """            
+            log('Database [{}] could not be deleted'.format(dbname), v=logging.CRITICAL, proc= proc)
+            raise IOError('Database [{}] could not be deleted'.format(dbname))
+        
     
     
     @logf
-    def execute_sql(self, *args):
-        with self.conn, self.conn.cursor() as cur:
+    def execute_sql(self, *args, proc=None, fetch= True):
+        with self.conn, self.conn.cursor() as cur, sql_logger(proc):
             cur.execute(*args)
-            return cur.fetchall()
             
+            if fetch: return cur.fetchall()
+            else: return True
+        
+    def execute_sql_gen(self, *args, proc= None):
+        with self.conn, self.conn.cursor() as cur, sql_logger(proc):
+            cur.execute(*args)
+            
+            # Iterate over results and yield them in a generator
+            for result in cur:
+                if result is None: return True
+                else: yield result
+    
+    @logf
+    def database_exists(self, db):
+        '''Returns true is the specified database exists'''
+        proc = 'sql_database._database_exists'
+        
+        with psycopg2.connect(**config.cc.postgres.args) as conn:
+            with conn.cursor() as cur, sql_logger(proc):
+                cur.execute("SELECT 1 from pg_database WHERE datname= %s", (db,))
+                return bool(cur.fetchone()) 
+                
     @logf
     def create_database(self, new_db):
         '''Creates a new database'''
-        
         proc = 'sql_database.create_database'
-        
-        with psycopg2.connect(**config.postgres_args()) as conn:
-            with conn.cursor() as cur, sql_logger(proc):
-                cur.execute("SELECT 1 from pg_database WHERE datname= %s", (new_db,))
-                exists = bool(cur.fetchone()) 
             
-        if not exists:
-            with psycopg2.connect(**config.postgres_args()) as conn:
+        if self.database_exists(new_db):
+            return True
+        else:
+            with psycopg2.connect(**config.cc.postgres.args) as conn:
                 conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
                 with conn.cursor() as cur, sql_logger(proc):
                     cur.execute('CREATE DATABASE {};'.format(new_db))
@@ -181,11 +205,15 @@ class main_db(sql_database):
     def __init__(self, **kwargs):
         proc = 'main_db.__init__'
         
-        self.DB_NAME = 'main'
+        sql_database.__init__(self, **kwargs)
         
-        sql_database.__init__(self, self.DB_NAME, **kwargs)
+        # Get the database name from config
+        self.dbname= config.cc.main.name
         
-        self.conn = psycopg2.connect(**config.main_args())
+        try: self.create_database(self.dbname)
+        except FileExistsError: pass
+        
+        self.conn = psycopg2.connect(**config.cc.main.args)
         self.create_table(drop_tables=self.clean)
         self.ignore_visited = kwargs.get('ignore_visited', True)
         
@@ -202,7 +230,7 @@ class main_db(sql_database):
 
     
     def __len__(self):
-        return sql_database.count(self, self.DB_NAME)
+        return sql_database.count(self, self.dbname)
     
     def count_pending(self):
         '''Counts the number of rows in the table'''
@@ -514,7 +542,7 @@ class main_db(sql_database):
         
         if not _list: _list = []
         
-        log('Adding device(s) to  table.'.format(self.DB_NAME),
+        log('Adding device(s) to  table.'.format(self.dbname),
             proc=proc, v=logging.N)
         
         # If a single device was passed, add it to the list so that we can
@@ -580,17 +608,37 @@ class main_db(sql_database):
             proc=proc, v=logging.I)
         return True
     
+
+def useCursor(func):
+    '''Convenience function that creates a cursor object to pass to 
+    the wrapped method in case one wasn't passed originally'''
+    
+    def needsCursor(self, *args, **kwargs):
+        # Check if a cursor was passed
+        if 'cur' in kwargs:
+            return func(self, *args, **kwargs)
+        
+        else:
+            # Create one otherwise
+            with self.conn, self.conn.cursor() as cur:
+                return func(self, *args, **kwargs, cur=cur)
+    return needsCursor
+    
     
 class device_db(sql_database):
     
     def __init__(self, **kwargs):
         proc = 'device_db.__init__'
         
-        self.DB_NAME = 'inventory'
+        sql_database.__init__(self, **kwargs)
         
-        sql_database.__init__(self,self.DB_NAME, **kwargs)
+        # Get the database name from config
+        self.dbname = config.cc.inventory.name
 
-        self.conn = psycopg2.connect(**config.inventory_args())
+        try: self.create_database(self.dbname)
+        except FileExistsError: pass
+
+        self.conn = psycopg2.connect(**config.cc.inventory.args)
         self.create_table(drop_tables=self.clean)
         
     
@@ -601,18 +649,33 @@ class device_db(sql_database):
     def ip_exists(self, ip):
         return sql_database.ip_exists(self, ip, 'interfaces')
     
+    @useCursor
+    def locate_mac(self, mac, cur= None):
+        cur.execute('''
+            SELECT distinct devices.device_name as device, interface_name as interface, neighbors.device_name as neighbor
+            FROM mac
+            JOIN devices ON mac.device_id=devices.device_id
+            JOIN interfaces on mac.interface_id=interfaces.interface_id
+            LEFT JOIN neighbors on mac.interface_id=neighbors.interface_id
+            WHERE mac_address = %s;
+            ''', (mac, ))
+        return cur.fetchall()
     
-    def locate_mac(self, mac):
-        with self.conn, self.conn.cursor() as cur:
-            cur.execute('''
-                SELECT distinct devices.device_name as device, interface_name as interface, neighbors.device_name as neighbor
-                FROM mac
-                JOIN devices ON mac.device_id=devices.device_id
-                JOIN interfaces on mac.interface_id=interfaces.interface_id
-                LEFT JOIN neighbors on mac.interface_id=neighbors.interface_id
-                WHERE mac_address = %s;
-                ''', (mac, ))
-            return cur.fetchall()
+    @useCursor
+    def delete_device_record(self, id, cur= None):
+        '''Removes a record from the devices table''' 
+        proc = 'device_db.remove_device_record'
+        
+        # Error checking
+        assert isinstance(id, int), (
+            proc + ': id [{}] is not int'.format(type(id)))
+        
+        # Delete the entry
+        cur.execute('''
+            DELETE 
+            FROM devices
+            WHERE device_id = %s
+            ''', (id, ))
     
     
     def devices_on_subnet(self, subnet):
@@ -633,8 +696,10 @@ class device_db(sql_database):
         with self.conn, self.conn.cursor() as cur:
             cur.execute('''
                 SELECT distinct mac_address
-                FROM (SELECT distinct interface_id
-                      FROM (SELECT distinct device_id
+                FROM (
+                      SELECT distinct interface_id
+                      FROM (
+                            SELECT distinct device_id
                             FROM interfaces
                             WHERE network_ip = %s) as foo
                       JOIN interfaces ON interfaces.device_id=foo.device_id) as bar
@@ -660,82 +725,315 @@ class device_db(sql_database):
                 ''', (device_id, ))
             return cur.fetchall()
     
-    def unique_name_exists(self, name):
-        '''Returns True if a given unique_name already exists'''
-        proc = 'io_sql.unique_name_exists'
+    #===========================================================================
+    # def device_id_exists(self, id):
+    #     '''Returns True if a given device_id exists'''
+    #     
+    #     proc = 'io_sql.device_id_exists'
+    #     
+    #     with self.conn, self.conn.cursor() as cur:
+    #         cur.execute('''
+    #             SELECT device_id 
+    #             FROM devices 
+    #             WHERE device_id = %s;
+    #             ''',
+    #             (id, ))
+    #         result= cur.fetchone()
+    #         
+    #         if result is None: return False
+    #         else: return result[0]
+    #===========================================================================
+    
+    #===========================================================================
+    # def unique_name_exists(self, name):
+    #     '''Returns True if a given unique_name already exists'''
+    #     proc = 'io_sql.unique_name_exists'
+    #     
+    #     with self.conn, self.conn.cursor() as cur:
+    #         cur.execute('''
+    #             SELECT device_id 
+    #             FROM devices 
+    #             WHERE unique_name = %s;
+    #             ''',
+    #             (name.upper(),))
+    #         result= cur.fetchone()
+    #         
+    #         if result is None: return False
+    #         else: return result[0]
+    #===========================================================================
+    
+    
+    def exists(self,
+               device_id= None,
+               unique_name= None,
+               device_name= None,
+               ):
+        
+        # Error checking
+        if (device_id is None and
+            unique_name is None and
+            device_name is None):
+            raise ValueError('No values passed')
         
         with self.conn, self.conn.cursor() as cur:
-            cur.execute('''
-                select exists 
-                (select * from devices 
-                where unique_name = %s
-                limit 1);
-                ''',
-                (name.upper(),))
-            return cur.fetchone()[0]  # Returns a (False,) tuple)
-    
-    
-    def add_device_nd(self, _device=None, _list=None):
-        """Appends a device or a list of devices to the database
+            
+            # Try each possible method until a match is found
+            if device_id:
+                cur.execute('''
+                    SELECT device_id 
+                    FROM devices 
+                    WHERE device_id = %s
+                    limit 1;
+                    ''',
+                    (device_id, ))
+                result= cur.fetchone()
+                if result: return result[0]
+                
+            if unique_name:
+                cur.execute('''
+                    SELECT device_id 
+                    FROM devices 
+                    WHERE unique_name = %s
+                    limit 1;
+                    ''',
+                    (unique_name, ))
+                result= cur.fetchone()
+                if result: return result[0]
+                
+            if device_name:
+                cur.execute('''
+                    SELECT device_id 
+                    FROM devices 
+                    WHERE device_name = %s
+                    limit 1;
+                    ''',
+                    (device_name, ))
+                result= cur.fetchone()
+                if result: return result[0]
         
-        Optional Args:
+        return False
+            
+            
+            
+            
+    
+    def add_device_nd(self, _device):
+        """Appends a device to the database
+        
+        Args:
             _device (network_device): A single network_device
-            _list (List): List of network_device objects
             
         Returns:
-            Boolean: True if write was successful, False otherwise.
+            Boolean: False if write was unsuccessful
+            Int: Index of the device that was added, if successful
         """ 
         proc = 'device_db.add_device_nd'
         
         # Return an error if no data was passed    
-        if not (_list or _device): 
+        if not _device: 
             log('No devices to add', proc=proc, v=logging.A)
             return False
         
-        if not _list: _list = []
-        
-        log('Adding device(s) to devices table'.format(self.DB_NAME), proc=proc, v=logging.N)
-        
-        # If a single device was passed, add it for group processing
-        if _device: _list.append(_device)
+        log('Adding device to devices table'.format(self.dbname), proc=proc, v=logging.N)
         
         # Do everything in one transaction
         with self.conn, self.conn.cursor() as cur:
             
-            # Process each device
-            for _device in _list:
-                device_id = self.insert_device_entry(_device, cur)
+            device_id = self.insert_device_entry(_device, cur)
+            
+            # Add all the device's serials
+            for serial in _device.serial_numbers:
+                self.insert_serial_entry(device_id, serial, cur)
+            
+            # Add all of the device's interfaces            
+            for interf in _device.interfaces:
+                interface_id = self.insert_interface_entry(device_id, interf, cur)
                 
-                # Add all the device's serials
-                for serial in _device.serial_numbers:
-                    self.insert_serial_entry(device_id, serial, cur)
+                # Add all the interface's mac addresses
+                for mac_address in interf.mac_address_table:
+                    mac_id = self.insert_mac_entry(device_id, interface_id, mac_address, cur)
                 
-                # Add all of the device's interfaces            
-                for interf in _device.interfaces:
-                    interface_id = self.insert_interface_entry(device_id, interf, cur)
-                    
-                    # Add all the interface's mac addresses
-                    for mac_address in interf.mac_address_table:
-                        mac_id = self.insert_mac_entry(device_id, interface_id, mac_address, cur)
-                    
-                    # Add each neighbor + ip that was matched to an interface
-                    for neighbor in interf.neighbors:
-                        neighbor_id = self.insert_neighbor_entry(device_id, interface_id, neighbor, cur)
-                        for n_ip in neighbor: self.insert_neighbor_ip_entry(neighbor_id, n_ip, cur)
-                    
-                # Add each neighbor + ip not matched to an interface
-                for neighbor in _device.neighbors:
-                    neighbor_id = self.insert_neighbor_entry(device_id, None, neighbor, cur)
+                # Add each neighbor + ip that was matched to an interface
+                for neighbor in interf.neighbors:
+                    neighbor_id = self.insert_neighbor_entry(device_id, interface_id, neighbor, cur)
                     for n_ip in neighbor: self.insert_neighbor_ip_entry(neighbor_id, n_ip, cur)
+                
+            # Add each neighbor + ip not matched to an interface
+            for neighbor in _device.neighbors:
+                neighbor_id = self.insert_neighbor_entry(device_id, None, neighbor, cur)
+                for n_ip in neighbor: self.insert_neighbor_ip_entry(neighbor_id, n_ip, cur)
                     
         self.conn.commit()
+        return device_id
+    
+    
+    def get_device_record(self,
+                          column,
+                          value):
+        '''Get a device record based on a lookup column.
+        'WHERE column = value'
+        
+        Returns:
+            psycopg2 dict object
+        '''
+        
+        with self.conn as conn, conn.cursor(
+            cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute('''
+                SELECT *
+                FROM devices
+                WHERE {} = %s
+                limit 1;
+            '''.format(column),
+            (value, )
+            )
+            return cur.fetchone()
+
+
+
+    ##############################################
+    # Update existing device
+    ##############################################
+    def process_duplicate_device(self, device):
+        ''' Parent method for handeling an existing device which
+        needs to be updated. 
+        
+        1. Determine if the device actually exists (unique_name), 
+            and get the device_id
+        2. Overwrite all entries in the device with the new device
+        3. Set a new updated time for all dependent tables
+        4. Delete any interfaces and serials which no longer exist
+        5. Add any new interfaces and serials
+        6. Add any new MAC addresses
+        7. Update any newly non-existent MAC addresses
+        '''
+        
+        proc= 'main.process_duplicate_device'
+        
+        index = self.exists(unique_name= device.unique_name)
+        
+        # Return if the device is not already in the database
+        if not index:
+            log('Not a duplicate record: [{}]'.format(
+                device.device_name), v=logging.I, proc= proc)
+            return False
+        
+        log('Positive Duplicate record: [{}]'.format(
+                device.device_name), v=logging.N, proc= proc)
+        
+        self.update_device_entry()
         return True
     
     
-    def insert_device_entry(self, _device, cur):
-        # Trim the password
-        _password = _device.credentials.get('password', None)
-        if _password: _password = _password[:2]
+    @useCursor
+    def update_device_entry(self, device, cur,
+                            device_id= None,
+                            unique_name= None,
+                            ):
+        
+        proc= 'device_db.update_device_entry'
+        
+        # Make sure we got a valid id or name
+        if (unique_name is None and
+            device_id is None):
+            log('No name or id passed to process',
+                proc=proc, v= logging.A)
+            raise ValueError(proc+ ': No name or id passed to process')
+        
+        # Make the 'where' clause
+        where_clause= 'AND '.join([
+            '{} = %({})s\n'.format(x, 'w'+x) for x in 
+           ('device_id', 'unique_name') if x is not None])
+        
+        # Update the existing device into the database
+        cur.execute('''
+            UPDATE devices
+            SET
+                device_name= %(device_name)s,
+                unique_name= %(unique_name)s,
+                netmiko_platform= %(netmiko_platform)s,
+                system_platform= %(system_platform)s,
+                software= %(software)s,
+                raw_cdp= %(raw_cdp)s,
+                config= %(config)s,
+                failed= %(failed)s,
+                error_log= %(error_log)s,
+                processing_error= %(processing_error)s,
+                tcp_22= %(tcp_22)s,
+                tcp_23= %(tcp_23)s,
+                username= %(username)s,
+                password= %(password)s,
+                cred_type= %(cred_type)s,
+                updated= now()
+            WHERE 
+                {}
+            '''.format(where_clause),
+            {
+                'device_name': device.device_name,
+                'unique_name': device.unique_name,
+                'netmiko_platform': device.netmiko_platform,
+                'system_platform': device.system_platform,
+                'software': device.software,
+                'raw_cdp': device.raw_cdp,
+                'config': device.config,
+                'failed': device.failed,
+                'error_log': device.error_log,
+                'processing_error': device.processing_error,
+                'tcp_22': device.tcp_22,
+                'tcp_23': device.tcp_23,
+                'username': device.username,
+                'password': device.short_pass(),
+                'cred_type': device.cred_type,
+                # Where
+                'wdevice_id': device_id,
+                'wunique_name': unique_name,
+            })
+        
+        return True
+            
+        
+    @useCursor
+    def set_dependents_as_updated(self, device_id, cur= None):
+        '''Sets the last touched time on all dependents of the
+        given device_id to now'''
+        
+        cur.execute('''
+            UPDATE devices
+            SET updated = now()
+            WHERE device_id = %(d)s;
+            
+            UPDATE interfaces
+            SET updated = now()
+            WHERE device_id = %(d)s;
+            
+            UPDATE mac
+            SET updated = now()
+            WHERE device_id = %(d)s;
+            
+            UPDATE neighbors
+            SET updated = now()
+            WHERE device_id = %(d)s;
+            
+            UPDATE serials
+            SET updated = now()
+            WHERE device_id = %(d)s;
+            
+            UPDATE neighbor_ips
+            SET updated = now()
+            WHERE neighbor_id = 
+                (SELECT neighbor_id
+                 FROM neighbors
+                 WHERE device_id = %(d)s);
+        ''', {'d': device_id})
+    
+    
+    
+    
+    
+    ######################################################
+    # Add new device Methods
+    ######################################################
+    def insert_device_entry(self, device, cur):
        
         # Add the device into the database
         cur.execute('''
@@ -746,12 +1044,12 @@ class device_db(sql_database):
                 system_platform,
                 software,
                 raw_cdp,
-                raw_config,
+                config,
                 failed,
                 error_log,
                 processing_error,
-                TCP_22,
-                TCP_23,
+                tcp_22,
+                tcp_23,
                 username,
                 password,
                 cred_type
@@ -763,12 +1061,12 @@ class device_db(sql_database):
                 %(system_platform)s,
                 %(software)s,
                 %(raw_cdp)s,
-                %(raw_config)s,
+                %(config)s,
                 %(failed)s,
                 %(error_log)s,
                 %(processing_error)s,
-                %(TCP_22)s,
-                %(TCP_23)s,
+                %(tcp_22)s,
+                %(tcp_23)s,
                 %(username)s,
                 %(password)s,
                 %(cred_type)s
@@ -776,23 +1074,24 @@ class device_db(sql_database):
             RETURNING device_id;
             ''',
             {
-                'device_name': _device.device_name,
-                'unique_name': _device.unique_name(),
-                'netmiko_platform': _device.netmiko_platform,
-                'system_platform': _device.system_platform,
-                'software': _device.software,
-                'raw_cdp': _device.raw_cdp,
-                'raw_config': _device.config,
-                'failed': _device.failed,
-                'error_log': _device.error_log,
-                'processing_error': _device.processing_error,
-                'TCP_22': _device.TCP_22,
-                'TCP_23': _device.TCP_23,
-                'username': _device.credentials.get('username', None),
-                'password': _password,
-                'cred_type': _device.credentials.get('type', None),
+                'device_name': device.device_name,
+                'unique_name': device.unique_name,
+                'netmiko_platform': device.netmiko_platform,
+                'system_platform': device.system_platform,
+                'software': device.software,
+                'raw_cdp': device.raw_cdp,
+                'config': device.config,
+                'failed': device.failed,
+                'error_log': device.error_log,
+                'processing_error': device.processing_error,
+                'tcp_22': device.tcp_22,
+                'tcp_23': device.tcp_23,
+                'username': device.username,
+                'password': device.short_pass(),
+                'cred_type': device.cred_type,
             })
-        return cur.fetchone()[0]
+        device.device_id= cur.fetchone()[0]
+        return device.device_id
     
     
     def insert_interface_entry(self, device_id, interf, cur):
@@ -981,12 +1280,12 @@ class device_db(sql_database):
                         system_platform    TEXT,
                         software           TEXT,
                         raw_cdp            TEXT,
-                        raw_config         TEXT,
+                        config             TEXT,
                         failed             BOOLEAN,
                         error_log          TEXT,
                         processing_error   BOOLEAN,
-                        TCP_22             BOOLEAN,
-                        TCP_23             BOOLEAN,
+                        tcp_22             BOOLEAN,
+                        tcp_23             BOOLEAN,
                         username           TEXT,
                         password           TEXT,
                         cred_type          TEXT,
@@ -1015,7 +1314,9 @@ class device_db(sql_database):
                         device_id              INTEGER NOT NULL,
                         interface_id           INTEGER NOT NULL,
                         mac_address            TEXT NOT NULL,
+                        seen_last_scan         BOOLEAN DEFAULT TRUE,
                         updated                TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        last_seen              TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
                         FOREIGN KEY(interface_id) REFERENCES Interfaces(interface_id) 
                             ON DELETE CASCADE ON UPDATE CASCADE,
                         FOREIGN KEY(device_id) REFERENCES Devices(device_id) 

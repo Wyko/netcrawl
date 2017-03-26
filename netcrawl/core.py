@@ -1,4 +1,4 @@
-import queue, multiprocessing, traceback, nmap, json
+import queue, multiprocessing, traceback, json
 import sys, argparse, textwrap 
 from time import sleep
 
@@ -39,98 +39,121 @@ def normal_run(**kwargs):
     workers = [worker(tasks, results) for i in range(num_workers)]
     for w in workers: w.start()
     
-    while True: 
-
-        #################### Add Devices To Queue #######################
-        # While there are pending neighbors, process each one
-        remaining = main_db.count_pending()
-        while ((remaining >= 0) and (tasks.full() == False)): 
-            
-            # Get the next device
-            device_d = main_db.get_next()
-            if device_d is None: break
-            
-            # Skip devices which have already been visited
-            if (kwargs.get('skip_named_duplicates') and 
-                main_db.ip_name_exists(ip=device_d.get('ip'),
-                                       name=device_d.get('device_name'),
-                                       table='visited')): visited = True  
-                                                
-            elif main_db.ip_exists(ip=device_d.get('ip'),
-                                   table='visited'): visited = True
-            else: visited = False
-            
-            if visited:
-                log('- Device {1} at {0} has already been processed. Skipping.'.format(
-                    device_d.get('ip', None), device_d.get('device_name', None)),
-                    proc=proc, v=logging.N)
-                main_db.remove_pending_record(device_d['pending_id'])
-                continue
-        
-            log('---- Adding to queue: {name} at {ip} || {pending} devices pending ----'.format(
-                ip=device_d.get('ip', None),
-                name=(device_d.get('device_name') if device_d.get('device_name') is not None 
-                       else '[Unknown Device]'),
-                pending=main_db.count_pending()),
-                proc=proc, v=logging.H)
-            
-            tasks.put(device_d)
-        
-        ################### Get results from the queue ###################
-        results_pool = []
-        while not results.empty(): 
-            log('Getting subprocess results', proc=proc, v=logging.D)
-            try: results_pool.append(results.get_nowait())
-            except queue.Empty: 
-                log('Queue Empty', proc=proc, v=logging.D)
-                break
-            else: log('Got a result', proc=proc, v=logging.D)
-        
-        log('Got [{}] subprocess results'.format(
-                len(results_pool)), proc=proc, v=logging.I)
-        
-        ############# Insert Processed Devices Into Database #############
-        for result in results_pool:
-            # Record the device as being processed and save it
-            log('Setting result [{}] as processed'.format(result['original']['ip']), proc=proc, v=logging.I)
-            main_db.remove_pending_record(result['original']['pending_id'])
-            
-            log('Adding result [{}] to Visited'.format(result['original']['ip']), proc=proc, v=logging.I)
-            main_db.add_visited_device_d(result['original'])
-        
-            if ((result['error'] is not None) or 
-                (result['device'].failed)): continue 
-                
-            else: 
-                # Add a successfully polled device to the database
-                log('Adding result [{}] to Devices'.format(result['original']['ip']), proc=proc, v=logging.I)
-                device_db.add_device_nd(result['device']) 
+    try:
+        while True: 
     
-                # Save the device config and the device neighbors 
-                log('Saving result [{}] Neighbors'.format(result['original']['ip']), proc=proc, v=logging.I)
-                main_db.add_device_pending_neighbors(result['device'])
-                result['device'].save_config()
+            #################### Add Devices To Queue #######################
+            # While there are pending neighbors, process each one
+            remaining = main_db.count_pending()
+            while ((remaining >= 0) and (tasks.full() == False)): 
                 
-                log('Successfully processed {}'.format(result['device'].device_name),
+                # Get the next device
+                device_d = main_db.get_next()
+                if device_d is None: break
+                
+                # Skip devices which have already been visited
+                if (kwargs.get('skip_named_duplicates') and 
+                    main_db.ip_name_exists(ip=device_d.get('ip'),
+                                           name=device_d.get('device_name'),
+                                           table='visited')): visited = True  
+                                                    
+                elif main_db.ip_exists(ip=device_d.get('ip'),
+                                       table='visited'): visited = True
+                else: visited = False
+                
+                if visited:
+                    log('- Device {1} at {0} has already been processed. Skipping.'.format(
+                        device_d.get('ip', None), device_d.get('device_name', None)),
+                        proc=proc, v=logging.N)
+                    main_db.remove_pending_record(device_d['pending_id'])
+                    continue
+            
+                log('---- Adding to queue: {name} at {ip} || {pending} devices pending ----'.format(
+                    ip=device_d.get('ip', None),
+                    name=(device_d.get('device_name') if device_d.get('device_name') is not None 
+                           else '[Unknown Device]'),
+                    pending=main_db.count_pending()),
                     proc=proc, v=logging.H)
-
                 
-        #################### POISION PILL ###############################
-        if (remaining is 0) and tasks.empty():
-            for w in workers:
-                tasks.put(None)
-            break
+                tasks.put(device_d)
+            
+            ################### Get results from the queue ###################
+            results_pool = []
+            while not results.empty(): 
+                log('Getting subprocess results', proc=proc, v=logging.D)
+                try: results_pool.append(results.get_nowait())
+                except queue.Empty: 
+                    log('Queue Empty', proc=proc, v=logging.D)
+                    break
+                else: log('Got a result', proc=proc, v=logging.D)
+            
+            log('Got [{}] subprocess results'.format(
+                    len(results_pool)), proc=proc, v=logging.I)
+            
+            ############# Insert Processed Devices Into Database #############
+            for result in results_pool:
+                # Record the device as being processed and save it
+                log('Setting result [{}] as processed'.format(result['original']['ip']), proc=proc, v=logging.I)
+                main_db.remove_pending_record(result['original']['pending_id'])
+                
+                log('Adding result [{}] to Visited'.format(result['original']['ip']), proc=proc, v=logging.I)
+                main_db.add_visited_device_d(result['original'])
+            
+                if ((result['error'] is not None) or 
+                    (result['device'].failed)): continue 
+                    
+                else: 
+                    # Add a successfully polled device to the database
+                    log('Adding result [{}] to Devices'.format(result['original']['ip']), proc=proc, v=logging.I)
+                    device_db.add_device_nd(result['device']) 
         
-        sleep(1)
-        log('Main loop done.', proc=proc, v=logging.I)
+                    # Save the device config and the device neighbors 
+                    log('Saving result [{}] Neighbors'.format(result['original']['ip']), proc=proc, v=logging.I)
+                    main_db.add_device_pending_neighbors(result['device'])
+                    result['device'].save_config()
+                    
+                    log('Successfully processed {}'.format(result['device'].device_name),
+                        proc=proc, v=logging.H)
     
-    # Close the connections to the databases
-    main_db.close()
-    device_db.close()    
+                    
+            #################### POISION PILL ###############################
+            if (remaining is 0) and tasks.empty():
+                _kill_workers(tasks, num_workers)
+                break
+            
+            sleep(1)
+            log('Main loop done.', proc=proc, v=logging.I)
     
-    log('Normal run complete. 0 devices pending.',
-        proc=proc, v=logging.H)
+    except (KeyboardInterrupt, SystemExit):
+        log('Run execution cancelled', proc=proc, v= logging.C)
+    
+    else:
+        log('Normal run complete. 0 devices pending.',
+            proc=proc, v=logging.H)
+    
+    finally:
+        # Stop the workers
+        _kill_workers(tasks, num_workers)   
+        # Close the connections to the databases
+        main_db.close()
+        device_db.close() 
+    
 
+
+
+def _kill_workers(task_queue, num_workers):
+    '''
+    Sends a NoneType poision pill to all active workers.
+    
+    Args:
+        task_queue (JoinableQueue): The task queue upon which
+            to put the poision pills
+        num_workers (int): The number of workers, which translates
+            to the number of poision pills to put in the queue
+    '''
+
+    for w in range(num_workers): task_queue.put(None)
+    
 
 class worker(multiprocessing.Process):
     
@@ -150,87 +173,91 @@ class worker(multiprocessing.Process):
         # Reset global variables since subprocesses may not
         # inherit parent runstates
         config.cc= self.cc
-        logging.VERBOSITY = config.cc['verbosity']
-        logging.PRINT_DEBUG= config.cc['debug']
         
-        while True:
-            
-            log('{}: Awaiting task. Queue size: [{}]'.format(
-                                                self.name,
-                                                self.task_queue.qsize()),
-                                                v=logging.I,
-                                                proc=proc)
-            # Get the next device in the queue
-            next_device = self.task_queue.get()
-            
-            # Poison pill means shutdown
-            if next_device is None:
-                log('{}: Got poision pill. Walking into the light...'.format(
-                    self.name, self.task_queue.qsize()), v=logging.I, proc=proc)
+        try:
+            while True:
                 
-                self.task_queue.task_done()
-                break
-            
-            log('{}: Got IP [{}], Device [{}]'.format(self.name,
-                                                      next_device.get('ip', 'Unknown IP'),
-                                                      next_device),
-                                                      v=logging.N, proc=proc,
-                                                      ip=next_device.get('ip', 'Unknown IP'))
-            
-            # Prepare the result set to pass back to the main proccess
-            result = {
-                'device': None,
-                'log': None,
-                'error': None,
-                'original': next_device,
-                }
-            
-            # Create an inherited device class object
-            try: result['device'] = create_instantiated_device(**next_device)
-            except Exception as e:
-                log('Device [{}] could not be instantiated: [{}]'.format(
-                    next_device.get('ip'), str(e)),
-                    v=logging.C, proc=proc)
-                result['log'] = 'Device could not be instantiated.\n'
-                result['error'] = e 
-                self.task_queue.task_done()
-                self.result_queue.put(result)
+                log('{}: Awaiting task. Queue size: [{}]'.format(
+                                                    self.name,
+                                                    self.task_queue.qsize()),
+                                                    v=logging.I,
+                                                    proc=proc)
+                # Get the next device in the queue
+                next_device = self.task_queue.get()
                 
-                if config.raise_exceptions(): raise
-                else: 
-                    traceback.print_exc()
-                    continue
+                # Poison pill means shutdown
+                if next_device is None:
+                    log('{}: Got poision pill. Walking into the light...'.format(
+                        self.name, self.task_queue.qsize()), v=logging.N, proc=proc)
+                    
+                    self.task_queue.task_done()
+                    break
                 
-            # Poll the device
-            try: result['device'].process_device()
-            except Exception as e:
-                log('Connection to {} failed: {}'.format(
-                    result['device'].ip, str(e)),
-                    v=logging.C, proc=proc)
-                result['log'] = 'Connection to {} failed: {}'.format(result['device'].ip, str(e))
-                result['error'] = e   
+                log('{}: Got IP [{}], Device [{}]'.format(self.name,
+                                                          next_device.get('ip', 'Unknown IP'),
+                                                          next_device),
+                                                          v=logging.N, proc=proc,
+                                                          ip=next_device.get('ip', 'Unknown IP'))
+                
+                # Prepare the result set to pass back to the main proccess
+                result = {
+                    'device': None,
+                    'log': None,
+                    'error': None,
+                    'original': next_device,
+                    }
+                
+                # Create an inherited device class object
+                try: result['device'] = create_instantiated_device(**next_device)
+                except Exception as e:
+                    log('Device [{}] could not be instantiated: [{}]'.format(
+                        next_device.get('ip'), str(e)),
+                        v=logging.C, proc=proc)
+                    result['log'] = 'Device could not be instantiated.\n'
+                    result['error'] = e 
+                    self.task_queue.task_done()
+                    self.result_queue.put(result)
+                    
+                    if config.cc.raise_exceptions: raise
+                    else: 
+                        traceback.print_exc()
+                        continue
+                    
+                # Poll the device
+                try: result['device'].process_device()
+                except Exception as e:
+                    log('Connection to {} failed: {}'.format(
+                        result['device'].ip, str(e)),
+                        v=logging.C, proc=proc)
+                    result['log'] = 'Connection to {} failed: {}'.format(result['device'].ip, str(e))
+                    result['error'] = e   
+                    
+                    # Set the connection to None in order to allow Pickling
+                    result['device'].connection = None
+                    
+                    # Put the result on the device queue and signal done
+                    self.task_queue.task_done()
+                    self.result_queue.put(result) 
+                        
+                    # Ignore CLI errors, raise the rest
+                    if (config.cc.raise_exceptions and 
+                        ('CLI connection' not in str(e))): 
+                        raise
+                    else: 
+    #                     traceback.print_exc()
+                        continue                                            
                 
                 # Set the connection to None in order to allow Pickling
                 result['device'].connection = None
                 
                 # Put the result on the device queue and signal done
                 self.task_queue.task_done()
-                self.result_queue.put(result) 
-                    
-                # Ignore CLI errors, raise the rest
-                if (config.raise_exceptions() and 
-                    ('CLI connection' not in str(e))): 
-                    raise
-                else: 
-#                     traceback.print_exc()
-                    continue                                            
-            
-            # Set the connection to None in order to allow Pickling
-            result['device'].connection = None
-            
-            # Put the result on the device queue and signal done
-            self.task_queue.task_done()
-            self.result_queue.put(result)
+                self.result_queue.put(result)
+        
+        except (KeyboardInterrupt, SystemExit):
+            try: self.terminate()
+            except: pass
+        
         return
             
 def _scan_host(h, nm):
@@ -260,6 +287,11 @@ def scan_range(_target, **kwargs):
     proc = 'main.scan_range'
      
     log('Starting host scan on target ' + _target, proc=proc, v=logging.H)
+    
+    try: import nmap
+    except ImportError:
+        log('Nmap not installed', proc= proc, v= logging.C)
+        return False
     
     nm = nmap.PortScanner()
     main_db = io_sql.main_db(**kwargs)
@@ -303,7 +335,7 @@ def single_run(target, netmiko_platform= 'unknown'):
     except Exception as e:
         device.alert(msg='Connection to {} failed: {}'.format(device.ip, str(e)), proc=proc)
         print('Device processing failed')
-        if config.raise_exceptions(): raise
+        if config.cc.raise_exceptions: raise
         return False
         
     # Output the device info to console
@@ -312,7 +344,7 @@ def single_run(target, netmiko_platform= 'unknown'):
     
 
 
-def parse_cli():
+def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='NetCrawl',
         formatter_class=argparse.RawTextHelpFormatter,
@@ -324,7 +356,7 @@ def parse_cli():
             integration with Nmap to discover un-connected hosts.'''))
     
     polling = parser.add_argument_group('Options')
-    scanning = parser.add_argument_group('Scan Type')
+    scanning = parser.add_argument_group('Run Type')
     action = scanning.add_mutually_exclusive_group(required=True)
     target = parser.add_argument_group('Target Specification')
     
@@ -475,8 +507,13 @@ def parse_cli():
         default='unknown'
         )
     
-    args = parser.parse_args()
+    return parser
     
+    
+def parse_cli():
+    
+    parser= make_parser()
+    args = parser.parse_args()
      
     if args.update: args.ignore_visited = True
      
@@ -498,24 +535,23 @@ def main():
     else:
         print('No arguments passed.')
         sys.exit()
+
+    # Set verbosity level for wylog
+    config.cc.verbosity= args.v
     
     log('Start new run', 
         new_log=True,
         v= logging.HIGH,
         proc= proc)
     
-    # Set verbosity level for wylog
-    logging.VERBOSITY = args.v
-    config.cc['verbosity']= args.v
-    
     logging.PRINT_DEBUG = args.debug
-    if args.debug: config.cc['debug']= True 
+    if args.debug: config.cc.debug= True 
     
 
     if args.manage_creds:
         menu.start()
     
-    if len(config.cc['credentials']) == 0:
+    if len(config.cc.credentials) == 0:
         print('There are no stored credentials. You must first add them with -m')
         log('There are no stored credentials. You must first add them with -m',
             v= logging.C, proc= proc)

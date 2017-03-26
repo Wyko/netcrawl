@@ -4,6 +4,7 @@ import sys
 
 from . import manage
 from ..wylog import logging
+from netcrawl import config
 
 
 class UserPrompt(Cmd):
@@ -82,7 +83,7 @@ class ModifyDevice(UserPrompt):
         print()
         _cred={'username': input('Username: '),
               'password': getpass.getpass('Password: '),
-              'type': input('Credential Type: ')
+              'cred_type': input('Credential Type: ')
              }
         
         manage.add_device_cred(_cred)
@@ -109,7 +110,7 @@ class DeleteDeviceCred(UserPrompt):
     prompt = 'main:devices:delete> '
     
     def preloop(self):
-        print(manage.list_device_creds())
+        print(manage.list_creds())
     
     def do_1(self, args):
         """Delete by index"""
@@ -132,5 +133,5 @@ class DeleteDeviceCred(UserPrompt):
         
     
 def start():
-    logging.VERBOSITY= 0
+    config.cc.verbosity = 0
     MainMenu().cmdloop()

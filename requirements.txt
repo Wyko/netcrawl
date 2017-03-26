@@ -1,7 +1,9 @@
 netmiko
 python-nmap
 keyring
+keyrings.alt
 cryptography
 psycopg2
 netaddr 
+prettytable
 faker
