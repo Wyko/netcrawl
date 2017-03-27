@@ -49,7 +49,7 @@ Scan one host with no logging output
 
 .. code-block:: console
 
-    C:\netcrawl>run.py -sS -t 10.1.120.1 -v0
+    >netcrawl -sS -t 10.1.120.1 -v0
 
     Device Name:       my-device-dist-1
     Unique Name:       MY-DEVICE-DIST-1_EC032
@@ -78,7 +78,7 @@ Locate a device on the network
  
 .. code-block:: console
  
-    C:\netcrawl>locate_mac.py 00FEC89232B0
+    >netcrawl-loc 00FEC89232B0
 
     MAC:  00FEC89232B0
     Manufacturer:  Cisco ,  Cisco Systems, Inc
