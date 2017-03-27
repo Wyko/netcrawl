@@ -196,8 +196,11 @@ def evaluate_mac(mac1, mac2):
     return int((count / len(mac1)) * 100)
         
         
-     
-if __name__ == '__main__':
+def main():
+    '''
+    Begins the audit. Outputs a csv file containing the audit results.
+    '''
+    
     import argparse
     config.parse_config()
     
@@ -207,7 +210,10 @@ if __name__ == '__main__':
     
     run_audit(args.csv)
         
-        
+    
+         
+if __name__ == '__main__':
+    main()    
         
         
         

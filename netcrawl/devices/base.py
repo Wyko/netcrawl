@@ -182,14 +182,17 @@ class NetworkDevice():
     
     
     def neighbor_table(self, sh_src=True, sh_name=True, sh_ip=True, sh_platform=True):
-        """Returns a formatted table of neighbors.
+        """Create a formatted table of neighbors.
         
         Keyword Args:
             sh_src (bool): When true, show the source interface for each entry
             sh_name (bool): When true, show the hostname for each entry
             sh_ip (bool): When true, show the IP address for each entry
             sh_platform (bool): When true, show the system platform for each entry
-            
+        
+        Returns: 
+            str: A string representation of the PrettyTable containing 
+            this device's neighbors.
         """ 
         
         pt = PrettyTable()

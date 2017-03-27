@@ -12,8 +12,9 @@ Network Information Gathering Made Easy
     :caption: Contents:
     :hidden:
     
-    netcrawl
     gettingstarted
+    netcrawl
+    dependencies
 
 
 Netcrawl is a tool designed to discover and poll one or more devices,

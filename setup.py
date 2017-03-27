@@ -27,7 +27,7 @@ tests_require = [
 setup(
     include_package_data=True,
     name = "netcrawl",
-    version = "0.3.1-beta",
+    version = "0.4.0-beta",
     author = "Wyko ter Haar",
     author_email = "vegaswyko@gmail.com",
     description = ("Netcrawl is a network discovery tool designed to poll one or more devices, inventory them, and then continue the process through the device's neighbors."),
@@ -41,6 +41,14 @@ setup(
               'netcrawl.wylog',
               'tests'
 			 ],
+    
+    entry_points={
+          'console_scripts': [
+              'netcrawl = netcrawl.__main__:main',
+              'netcrawl-loc = netcrawl.tools.locate_mac:main',
+              'netcrawl-macaudit = netcrawl.tools.mac_audit:main',
+          ]
+    },
       
     long_description= read('README.rst'),
     classifiers=[

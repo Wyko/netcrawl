@@ -4,13 +4,7 @@ Getting Started
 
 These instructions will get you a copy of the project up and running on your local machine.
 
-Dependencies
-============
-* *[Netmiko](https://github.com/ktbyers/netmiko)* - Any version that has the autodetect functionality.
-* *psycopg2* - PostgreSQL package
-* *[cryptography](https://cryptography.io)*
-* *[keyring](https://pypi.python.org/pypi/keyring)*
-  * [Running `keyring` on linux](https://pypi.python.org/pypi/keyring#using-keyring-on-ubuntu-16-04)
+
 
 ### Manual Install
 * *[PostgreSQL](https://www.postgresql.org/)*

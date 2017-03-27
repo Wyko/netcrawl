@@ -1,16 +1,22 @@
-NetCrawl
-================
-
-Subpackages
------------
+============================
+NetCrawl Code Documentation
+============================
 
 .. toctree::
+    :hidden:
 
     netcrawl.credentials
     netcrawl.devices
     netcrawl.tools
     netcrawl.wylog
 
+Contents
+---------
+
+.. automodule:: netcrawl.__main__
+    :members:
+
+    
 Submodules
 ----------
 
@@ -37,6 +43,8 @@ netcrawl.core module
     :members:
     :undoc-members:
     :show-inheritance:
+    
+.. autofunction:: netcrawl.core.normal_run
 
 netcrawl.device_dispatcher module
 ---------------------------------
