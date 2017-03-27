@@ -107,10 +107,10 @@ Authors
 .. _keyring: https://pypi.python.org/pypi/keyring
 .. _cryptography: https://cryptography.io
 
-.. |Build Status| image:: https://travis-ci.org/Wyko/netcrawl.svg?branch=development
+.. |Build Status| image:: https://travis-ci.org/Wyko/netcrawl.svg?branch=master
    :target: https://travis-ci.org/Wyko/netcrawl
-.. |Coverage Status| image:: https://coveralls.io/repos/github/Wyko/netcrawl/badge.svg?branch=development
-   :target: https://coveralls.io/github/Wyko/netcrawl?branch=development
+.. |Coverage Status| image:: https://coveralls.io/repos/github/Wyko/netcrawl/badge.svg?branch=master
+   :target: https://coveralls.io/github/Wyko/netcrawl?branch=master
 .. |Documentation Status| image:: https://readthedocs.org/projects/netcrawl/badge/?version=latest
    :target: http://netcrawl.readthedocs.io/en/latest/?badge=latest    
     
