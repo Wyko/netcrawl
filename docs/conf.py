@@ -19,19 +19,20 @@
 #
 import os
 import sys
-newpath= os.path.abspath('..') #os.path.join(os.path.abspath('..'), 'netcrawl')
-sys.path.insert(0, newpath)
+# sys.path.insert(0, os.path.join(os.path.abspath('..'), 'netcrawl'))
+sys.path.insert(0, os.path.abspath('..'))
 
-for x in sys.path:
-    print('Current Path: ', x)
+####################################
+# Troubleshoot Path
+# for x in sys.path:
+    # print('Current Path: ', x)
+   
+# print('Attempted to Insert: ', newpath)
+# import glob
+# for x in glob.glob(os.path.join(newpath, '**'), recursive= True):
+    # print(x)
+######################################
     
-print('Attempted to Insert: ', newpath)
-
-import glob
-
-for x in glob.glob(os.path.join(newpath, '**'), recursive= True):
-    print(x)
-
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
