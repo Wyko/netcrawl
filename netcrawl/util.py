@@ -1,15 +1,19 @@
 from contextlib import closing
 from netaddr import IPNetwork
 import socket, re, time
+from functools import wraps
 
 
 def getCreds():
-    """Get stored credentials using a the credentials module. 
-    Requests credentials via prompt otherwise.
+    """
+    Get stored credentials using a the credentials module. Requests credentials 
+    via prompt otherwise.
     
     Returns:
-        List of Dicts: {username, password, type} If the username and password 
-            had to be requested, the list will only have one entry.
+        List of Dicts: **[{username, password, cred_type}, ]** 
+        
+        If the username and password had to be requested, the 
+        list will only have one entry.
     """
     
     try: from credentials import credList
@@ -21,11 +25,14 @@ def getCreds():
     import getpass
     username = input("Username: ")
     password = getpass.getpass("Password: ")
-    return [{'username': username, 'password': password, 'type': 'User Entered'}]  
+    return [{'username': username, 'password': password, 'cred_type': 'User Entered'}]  
 
 
 def ucase_letters(raw_input):
-        return ''.join([x.upper() for x in raw_input if re.match(r'\w', x)])
+    '''Returns the input string stripped of everything but letters, numbers, and
+    underscores.''' 
+    
+    return ''.join([x.upper() for x in raw_input if re.match(r'\w', x)])
 
 
 def contains_mac_address(mac):
@@ -41,7 +48,24 @@ def contains_mac_address(mac):
         mac, re.I | re.X))
 
 
+class cleanExit:
+    '''Context manager who's only purpose is to cleanly exit when the code
+    execution is interrupted by the user'''
+    
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        if exc_type is KeyboardInterrupt:
+            print('Exiting due to keyboard interrupt.')
+            return True
+        return exc_type is None
+    
+
 def network_ip(ip, subnet):
+    '''Returns the network IP address calculated from the given :code:`ip` and
+    :code:`subnet`.
+    '''  
+    
     
     if not is_ip(ip): 
         raise TypeError('IP [{}] is not a valid ip'.format(ip))
@@ -94,6 +118,16 @@ def is_ip(raw_input):
     return bool(match)
 
 def netmask_to_cidr(netmask):
+    '''
+    Translates a netmask to a CIDR format
+    
+    Args:
+        netmask (str): A netmask in four octet ip address format
+        
+    Returns:
+        int: The CIDR representation of the netmask
+    '''
+    
     return sum([bin(int(x)).count("1") for x in netmask.split(".")])
     
     
@@ -127,17 +161,25 @@ def clean_ip(ip):
         
 
 def timeit(method):
+    '''Decorator method which times the wrapped method and prints the result to 
+    the console'''
+    
+    @wraps(method)
     def timed(*args, **kw):
         ts = time.time()
         result = method(*args, **kw)
         te = time.time()
         print('Function', method.__name__, 'time:', round((te - ts) * 1000, 1), 'ms')
         print()
+        
         return result
     return timed
 
-        
+
 class benchmark(object):
+    '''Context manager which times the surrounded code and prints the results 
+    to the console'''
+    
     def __init__(self, name):
         self.name = name
     def __enter__(self):
@@ -149,18 +191,19 @@ class benchmark(object):
 
 
 def port_is_open(port, address, timeout=5):
-    """Checks a socket to see if the port is open.
+    """
+    Checks a socket to see if the specified :code:`port` is open.
     
     Args:
         port (int): The numbered TCP port to check
-        address (string): The IP address of the host to check.
+        address (str): The address of the host to check
         
-    Optional Args:
+    Keyword Args:
         timeout (int): The number of seconds to wait before timing out. 
-            Defaults to 5 seconds. Zero seconds disables timeout.
+            Defaults to 5 seconds. Zero seconds disables timeout
     
     Returns: 
-        bool: True if the port is open, False if closed.
+        bool: True if the port is open
     """
     
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as conn:

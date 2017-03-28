@@ -163,4 +163,6 @@ texinfo_documents = [
 
 
 extensions += ['sphinxarg.ext']
+extensions += ['sphinx.ext.viewcode']
 
+html_show_sphinx= False

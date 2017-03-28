@@ -7,16 +7,6 @@ NetCrawl
 Network Information Gathering Made Easy
 ---------------------------------------
 
-.. toctree::
-    :maxdepth: 2
-    :caption: Contents:
-    :hidden:
-    
-    gettingstarted
-    netcrawl
-    dependencies
-
-
 Netcrawl is a tool designed to discover and poll one or more devices,
 inventory them, and then provide useful data on the processed devices.
 
@@ -114,6 +104,16 @@ Authors
 --------
 
 * **Wyko ter Haar** - *Initial work* - Wyko_
+
+
+.. toctree::
+    :maxdepth: 2
+    :hidden:
+        
+    gettingstarted
+    usage
+    dependencies
+    Code Documentations <netcrawl>
    
    
 .. _Wyko: https://github.com/Wyko   

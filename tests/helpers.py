@@ -92,6 +92,13 @@ def populated_cisco_network_device():
     
     nd.config= fake.text(max_nb_chars=fake.random_int(min=5))
     
+    # Fill the device with interfaces
+    for x in range(fake.random_int(1, 20)):
+        nd.interfaces.append(populated_cisco_interface())
+    
+    # Make the device ip be the first interface's IP
+    nd.ip = nd.interfaces[0].interface_ip
+    
     return nd
             
 

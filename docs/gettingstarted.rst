@@ -1,63 +1,43 @@
 ===============
-Getting Started
+Installation
 ===============
 
-These instructions will get you a copy of the project up and running on your local machine.
+These instructions will help install Netcrawl in your environment.
 
 
+Netcrawl
+=============
 
-### Manual Install
-* *[PostgreSQL](https://www.postgresql.org/)*
+.. code-block:: console
 
-### Optional - Nmap
-Without installing this, you will not be able to use the -sN function.
-
-* *[Nmap](https://nmap.org)* - Manually download and install
-* *[python-nmap](http://xael.org/pages/python-nmap-en.html)* - for scanning function
+    pip install -U netcrawl
 
 
-### Testing
+PostgreSQL
+==============
 
-`pip install Faker pytest`
+1. Download and install `PostgreSQL <https://www.postgresql.org/>`_
+2. Set up the :code:`main` and :code:`inventory` databases. If these are not created netcrawl will attempt to create them automatically.
 
-## Installation
 
-1. Run `pip install -U netcrawl`
-2. Install Postgresql and set up the **main** and **inventory** databases. If these are not created netcrawl will attempt to create them automatically.
-3. Follow any additional directions as needed to install `keyring` on your platform
-4. Add device and database credentials using `netcrawl -m`
+Credentials
+===============
 
-Usage
-=====
-
-.. argparse::
-   :module: netcrawl.core
-   :func: make_parser
-   :prog: NetCrawl
-   :nodefault:
-   
+Add device and database credentials to the credential vault using :code:`netcrawl -m`
    
 
-Add new credentials
-+++++++++++++++++++
+Nmap
+========
+
+Installing this will permit you to be able to use the -sN function.
+
+- `Nmap <https://nmap.org>`_ - Manually download and install
+- `python-nmap <http://xael.org/pages/python-nmap-en.html>`_ - Python insterface for Nmap
+
+
+Testing
+==========
 
 .. code-block:: console
-
-    netcrawl -m
-
-Recursive Scan
-++++++++++++++++
-
-This will inventory all devices from a seed device, skipping any neighbors who's 
-CDP hostname matches that of a previously attempted (successful or not) device.
-
-.. code-block:: console
-
-    netcrawl -sR --skip-named-duplicates -t 10.1.1.1
-
-Discover a network segment using Nmap
-+++++++++++++++++++++++++++++++++++++++
-
-.. code-block:: console
-
-    netcrawl -sN -t 10.0-10.0-254.1    
+    
+    pip install Faker pytest

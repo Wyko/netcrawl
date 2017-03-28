@@ -15,6 +15,16 @@ from netcrawl.config import cc
 from tests.helpers import fakeDevice, populated_cisco_network_device
 
 
+def test_count():
+    db = device_db()
+    assert db.count('devices') == 0
+    
+    with fakeDevice() as f:
+        assert db.count('devices') == 1
+        assert db.count('devices', column='device_name') == 1
+        
+    
+
 
 def test_update_device():
     
@@ -104,6 +114,19 @@ def test_fake_device():
         assert isinstance(f['index'], int)
         assert isinstance(f['device'], NetworkDevice)
         
+def test_ip_exists():
+    
+    db = device_db()
+    
+    # Create a fake device
+    with fakeDevice() as f:
+        
+        ip= f['device'].ip
+        
+        print(ip)
+        assert db.ip_exists(ip)
+    
+    assert not db.ip_exists(ip)
 
 def test_devicedb_exists_functions():
     db= io_sql.device_db()
@@ -113,9 +136,9 @@ def test_devicedb_exists_functions():
     assert not db.exists(unique_name= device.unique_name, 
                          device_name= device.device_name)
     index= db.add_device_nd(device)
-    
+
     # Test the different types of exists statements
-    assert db.exists(device_id= index)
+    assert isinstance(db.exists(device_id= index), int)
     assert db.exists(device_name= device.device_name)
     assert db.exists(unique_name= device.unique_name)
     

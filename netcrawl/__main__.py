@@ -7,7 +7,7 @@ Created on Mar 27, 2017
 import argparse, textwrap, sys
 from netcrawl.wylog import logging, log
 from netcrawl.credentials import menu
-from netcrawl.core import normal_run, single_run, scan_range
+from netcrawl.core import recursive_scan, single_scan, nmap_scan
 from netcrawl import config
 
 def make_parser() -> argparse.ArgumentParser:
@@ -250,7 +250,7 @@ def main(args=None):
     if args.network_scan:
         if args.host: 
             log('##### Starting Scan #####', proc=proc, v=logging.H)
-            scan_range(args.host,
+            nmap_scan(args.host,
                        clean=args.clean)
             log('##### Scan Complete #####', proc=proc, v=logging.H)
         else:
@@ -259,7 +259,7 @@ def main(args=None):
     elif args.recursive: 
         log('##### Starting Recursive Run #####', proc=proc, v=logging.H)
         
-        normal_run(
+        recursive_scan(
             target=args.host,
             netmiko_platform=args.platform,
             ignore_visited=args.ignore_visited,
@@ -269,7 +269,7 @@ def main(args=None):
        
     elif args.single: 
         log('##### Starting Single Run #####', proc=proc, v=logging.H)
-        single_run(
+        single_scan(
             target= args.host,
             netmiko_platform=args.platform,
             )
@@ -277,4 +277,4 @@ def main(args=None):
     
 
 if __name__ == '__main__':
-    pass
+    main()

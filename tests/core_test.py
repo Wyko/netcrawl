@@ -9,7 +9,7 @@ from faker import Faker
 from tests import helpers
 import pytest
 
-@pytest.mark.xfail(reason='Duplicate device processing not enabled yet')
+# @pytest.mark.xfail(reason='Duplicate device processing not enabled yet')
 def test_process_duplicate_device():
     
     # Connect to the database
@@ -20,13 +20,18 @@ def test_process_duplicate_device():
     assert not ddb.exists(unique_name= device.unique_name, 
                           device_name= device.device_name)
     
-    ddb.add_device_nd(device)
+    index= ddb.add_device_nd(device)
     assert ddb.exists(unique_name= device.unique_name)
     
-    duplicate= core.process_duplicate_device(device, ddb)
+    #===========================================================================
+    # duplicate= core.process_duplicate_device(device, ddb)
+    # assert duplicate
+    #===========================================================================
     
-    assert duplicate
-        
+    ddb.delete_device_record(index)
+    
+    assert not ddb.exists(unique_name= device.unique_name)
+    assert ddb.count('devices') == 0    
     
     
     

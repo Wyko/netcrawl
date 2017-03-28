@@ -1,3 +1,4 @@
+from functools import wraps
 from psycopg2 import errorcodes
 import psycopg2, time, traceback
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
@@ -8,14 +9,25 @@ from .wylog import log, logf, logging
 from contextlib import contextmanager
 
 
-retry_args = {'stop_max_delay': 60000,  # Stop after 60 seconds
-             'wait_exponential_multiplier': 100,  # Exponential backoff
-             'wait_exponential_max': 10000,
-             }
-
+def useCursor(func):
+    '''Decorator that creates a cursor object to pass to the wrapped method in 
+    case one wasn't passed originally. The wrapped function should accept 
+    :code:`cur` as an argument.'''
+    @wraps(func)
+    def needsCursor(self, *args, **kwargs):
+        # Check if a cursor was passed
+        if 'cur' in kwargs:
+            return func(self, *args, **kwargs)
+        
+        else:
+            # Create one otherwise
+            with self.conn, self.conn.cursor() as cur:
+                return func(self, *args, **kwargs, cur=cur)
+    return needsCursor
+            
             
 class sql_logger():
-    '''Utility class to enable logging of SQL execute statements, 
+    '''Utility class to enable logging and timing SQL execute statements, 
     as well as handling specific errors'''
     
     def __init__(self, proc, ignore_duplicates=True):
@@ -53,11 +65,24 @@ class sql_logger():
 
 
 class sql_database():
+    ''' 
+    A base class to facilitate SQL database operations.
+    
+    Keyword Args:
+        clean (bool): If True, this causes all database tables to 
+            be dropped in order to start with a clean database.
+            
+            .. warning:: Obviously, this is really dangerous.
+    '''
+    
     def __init__(self, **kwargs):
         self.clean = kwargs.get('clean', False)
         
     def delete_database(self, dbname):
         '''Deletes a database
+
+        Returns:
+            bool: True if the database was created
         
         Raises:
             FileExistsError: If the database to be deleted 
@@ -105,6 +130,23 @@ class sql_database():
     
     @logf
     def execute_sql(self, *args, proc=None, fetch= True):
+        '''
+        Executes a SQL snippet and optionally gets the results
+        
+        Arguments:
+            *args: The arguments to pass along  
+                to :meth:`pyscopg2.cursor.execute`. Usually a string 
+                containing the SQL statement, and potentially a tuple of 
+                parameters.
+        
+        Keyword Args:
+            proc (str): The name of the parent process, for logging purposes
+            fetch (bool): If True, fetches all results from the query
+        
+        Returns:
+            tuple: The results of :meth:`pyscopg2.cursor.fetchall`
+        '''
+        
         with self.conn, self.conn.cursor() as cur, sql_logger(proc):
             cur.execute(*args)
             
@@ -112,6 +154,22 @@ class sql_database():
             else: return True
         
     def execute_sql_gen(self, *args, proc= None):
+        '''
+        Executes a SQL snippet and gets the results in a generator
+        
+        Arguments:
+            *args: The arguments to pass along  
+                to :meth:`pyscopg2.cursor.execute`. Usually a string 
+                containing the SQL statement, and potentially a tuple of 
+                parameters.
+        
+        Keyword Args:
+            proc (str): The name of the parent process, for logging purposes
+        
+        Returns:
+            generator: The results of :meth:`pyscopg2.cursor.fetchall`
+        '''
+        
         with self.conn, self.conn.cursor() as cur, sql_logger(proc):
             cur.execute(*args)
             
@@ -120,9 +178,90 @@ class sql_database():
                 if result is None: return True
                 else: yield result
     
+    @useCursor
+    def count(self, table, 
+            column= '*', 
+            value= None, 
+            partial_value= None, 
+            distinct= False,
+            cur= None):
+        '''Counts the occurrences of the specified :code:`column` in 
+        a given :code:`table`. 
+        
+        Args:
+            table (str): The table to search in
+            
+        Keyword Args:
+            column (str): The column to count
+            distinct (bool): If True, count only unique matches
+            
+            value (str): If not None, adds a where clause to the count in the 
+                format: 
+        
+                .. code-block:: sql
+                
+                    WHERE column = 'value'
+                    
+            partial_value (str): If not None, adds a where clause which 
+                will match a partial string in the format: 
+        
+                .. code-block:: sql
+                
+                    WHERE column like '%partial_value1%'
+                    
+        Returns:
+            int: The number of matches
+        '''
+        proc= 'io.sql.count'
+        
+        # Make the Where statements
+        where= ''
+        if value is not None:
+            assert isinstance(value, str)
+            where+= " WHERE {column} = '{value}' ".format(
+                column= column, value= value)
+            
+            if partial_value: where += ' AND '
+            
+        if partial_value is not None:
+            assert isinstance(partial_value, str)
+            where+= " WHERE {column} like '%{value}% ".format(
+                column= column, value= partial_value)
+        
+        # Add the distinct qualifier to the statement 
+        if distinct: d= ' DISTINCT '
+        else: d= ''
+        
+        cur.execute(
+            '''
+            SELECT {distinct} count({column}) 
+            FROM {table}
+            {where};
+            '''.format(
+                distinct= d,
+                column= column,
+                table= table,
+                where= where,
+                ))
+
+        # Get the result
+        result= cur.fetchone()
+        if result: return int(result[0])
+        else: return 0 
+        
+    
     @logf
     def database_exists(self, db):
-        '''Returns true is the specified database exists'''
+        '''
+        Returns true is the specified database exists
+        
+        Args:
+            db (str): A database name
+            
+        Returns:
+            bool: True if the database exists
+        '''
+        
         proc = 'sql_database._database_exists'
         
         with psycopg2.connect(**config.cc.postgres.args) as conn:
@@ -132,7 +271,12 @@ class sql_database():
                 
     @logf
     def create_database(self, new_db):
-        '''Creates a new database'''
+        '''
+        Creates a new database
+        
+        Args:
+            new_db (str): Database name to create
+        '''
         proc = 'sql_database.create_database'
             
         if self.database_exists(new_db):
@@ -145,15 +289,26 @@ class sql_database():
                     return True
     
     def close(self):
+        '''Closes the connection to the database if it is open'''
         if not self.conn.closed: self.conn.close()
         
 
     def ip_exists(self, ip, table):
-        '''Check if a given IP exists in the database'''
+        '''
+        Check if a given IP exists in the database
+        
+        Args:
+            ip (str): The IP address to check for
+            table (str): The table to check
+            
+        Raises:
+            ValueError: If an argument is an improper type
+        '''
+        
         proc = 'sql_database.ip_exists'
         
         if ip is None or table is None:
-            raise ValueError(proc + ': IP[{}] or Table[{]] missing'.format(
+            raise ValueError(proc + ': IP[{}] or Table[{}] missing'.format(
                 ip, table))
         
         with self.conn, self.conn.cursor() as cur:
@@ -165,6 +320,7 @@ class sql_database():
                 '''.format(t=table),
                 {'ip': ip}
                 )
+            
             return cur.fetchone()[0]  # Returns a (False,) tuple
         
         
@@ -191,13 +347,7 @@ class sql_database():
             return cur.fetchone()[0]  # Returns a (False,) tuple
         
     
-    def count(self, table):
-        '''Counts the number of rows in the table'''
-        proc = 'io_sql.count'
-        
-        with self.conn, self.conn.cursor() as cur:
-            cur.execute('SELECT count(*) as exact_count from {}'.format(table))
-            return cur.fetchone()[0]
+
 
 
 class main_db(sql_database):
@@ -608,22 +758,6 @@ class main_db(sql_database):
             proc=proc, v=logging.I)
         return True
     
-
-def useCursor(func):
-    '''Convenience function that creates a cursor object to pass to 
-    the wrapped method in case one wasn't passed originally'''
-    
-    def needsCursor(self, *args, **kwargs):
-        # Check if a cursor was passed
-        if 'cur' in kwargs:
-            return func(self, *args, **kwargs)
-        
-        else:
-            # Create one otherwise
-            with self.conn, self.conn.cursor() as cur:
-                return func(self, *args, **kwargs, cur=cur)
-    return needsCursor
-    
     
 class device_db(sql_database):
     
@@ -657,8 +791,8 @@ class device_db(sql_database):
             JOIN devices ON mac.device_id=devices.device_id
             JOIN interfaces on mac.interface_id=interfaces.interface_id
             LEFT JOIN neighbors on mac.interface_id=neighbors.interface_id
-            WHERE mac_address = %s;
-            ''', (mac, ))
+            WHERE mac_address like %s;
+            ''', ('%' + mac + '%', ))
         return cur.fetchall()
     
     @useCursor
@@ -768,6 +902,20 @@ class device_db(sql_database):
                unique_name= None,
                device_name= None,
                ):
+        '''
+        Checks whether a device record is present in the devices table. Tries
+        each supplied identifier in order until a match is found, then 
+        returns the device_id of the found record.
+                
+        Keyword Args:
+            device_id (int): If not None, check the device_id column for a match
+            unique_name (str): If not None, check the unique_name column for a match
+            device_name (str): If not None, check the device_name column for a match
+            
+        Returns
+            int: The device_id of the first match found
+            bool: False if not found 
+        '''
         
         # Error checking
         if (device_id is None and
@@ -787,7 +935,7 @@ class device_db(sql_database):
                     ''',
                     (device_id, ))
                 result= cur.fetchone()
-                if result: return result[0]
+                if result: return int(result[0])
                 
             if unique_name:
                 cur.execute('''
@@ -798,7 +946,7 @@ class device_db(sql_database):
                     ''',
                     (unique_name, ))
                 result= cur.fetchone()
-                if result: return result[0]
+                if result: return int(result[0])
                 
             if device_name:
                 cur.execute('''
@@ -809,7 +957,7 @@ class device_db(sql_database):
                     ''',
                     (device_name, ))
                 result= cur.fetchone()
-                if result: return result[0]
+                if result: return int(result[0])
         
         return False
             
@@ -895,11 +1043,11 @@ class device_db(sql_database):
     # Update existing device
     ##############################################
     def process_duplicate_device(self, device):
-        ''' Parent method for handeling an existing device which
+        '''
+        Parent method for handling an existing device which
         needs to be updated. 
         
-        1. Determine if the device actually exists (unique_name), 
-            and get the device_id
+        1. Determine if the :code:`device` exists and, if so, get the device_id
         2. Overwrite all entries in the device with the new device
         3. Set a new updated time for all dependent tables
         4. Delete any interfaces and serials which no longer exist

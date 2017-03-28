@@ -27,3 +27,4 @@ def test_returns_correct_network_ip(ip, mask, expected):
     assert i.network_ip == expected
     
     
+    

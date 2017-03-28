@@ -297,7 +297,8 @@ class NetworkDevice():
         '''Main method which fully populates the network_device'''
         proc = 'base_device.process_devices'
         
-        log('Processing device', proc=proc, v=logging.N)
+        log('Processing IP [{}] Name [{}]'.format(
+            self.ip, self.device_name), proc=proc, v=logging.N)
         
         # Connect to the device
         try: result = cli.connect(handler=ConnectHandler,

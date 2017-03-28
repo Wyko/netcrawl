@@ -8,6 +8,7 @@ from datetime import datetime
 import os, traceback, time, sys
 
 from netcrawl import config
+from functools import wraps
 
 
 # Variables for logging
@@ -86,9 +87,15 @@ def log(msg, **kwargs):
                     )
     except: pass
     
-    # Print the message to console            
+    #===========================================================================
+    # # Debugging, print message and global Verbosity to console
+    # print('Msg V: [{}], Verb: [{}]'.format(v, config.cc.verbosity))
+    #===========================================================================
+    
+    # Print the message to console 
     try: 
-        if v <=  config.cc.verbosity and print_out: print('{:<35.35}: {}'.format(proc, msg))
+        if v <=  config.cc.verbosity and print_out: 
+            print('{:<35.35}: {}'.format(proc, msg))
     except: pass
     
     if not os.path.exists(config.cc.run_path):
@@ -132,6 +139,7 @@ def logf(f, **kwargs):
     parent= kwargs.get('parent', '__________')
     
     # Take a decorated method and log it.
+    @wraps(f)
     def wrapped_f(*args, **kwargs):
         log('Starting method [{}]'.format(f.__name__),
             proc= '{0}.{1}'.format(parent, f.__name__),

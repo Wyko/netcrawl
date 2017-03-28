@@ -4,12 +4,7 @@ from faker import Factory
 from pytest import raises
 
 from netcrawl.tools import mac_audit
-from netcrawl import config
 from tests import helpers
-import csv
-
-def setup_module(module):
-    config.parse_config()
 
 
 def _fake_csv_output():
@@ -18,7 +13,7 @@ def _fake_csv_output():
     #     {'mac': 'dc:a8:b0:ae:29:5f', 'network_ip': '168.237.85.0/25'}
     #     {'mac': '53:3a:83:c4:5c:1e', 'network_ip': '0.0.0.0/1'}]
     #===========================================================================
-
+    
     # Generate a fake CSV output
     from random import shuffle
     fake= Factory.create()
