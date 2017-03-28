@@ -24,6 +24,9 @@ sys.path.insert(0, newpath)
 print('Current Path: ', sys.path)
 print('Attempted to Insert: ', newpath)
 
+import glob
+print(glob.glob(newpath))
+
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
