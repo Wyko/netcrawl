@@ -19,7 +19,7 @@
 #
 import os
 import sys
-newpath= os.path.join(os.path.abspath('..'), 'netcrawl')
+newpath= os.path.abspath('..') #os.path.join(os.path.abspath('..'), 'netcrawl')
 sys.path.insert(0, newpath)
 
 for x in sys.path:
