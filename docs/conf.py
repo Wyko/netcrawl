@@ -21,11 +21,16 @@ import os
 import sys
 newpath= os.path.join(os.path.abspath('..'), 'netcrawl')
 sys.path.insert(0, newpath)
-print('Current Path: ', sys.path)
+
+for x in sys.path:
+    print('Current Path: ', x)
+    
 print('Attempted to Insert: ', newpath)
 
 import glob
-print(glob.glob(os.path.join(newpath, '**'), recursive= True))
+
+for x in glob.glob(os.path.join(newpath, '**'), recursive= True):
+    print(x)
 
 # -- General configuration ------------------------------------------------
 
