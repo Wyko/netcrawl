@@ -25,7 +25,7 @@ print('Current Path: ', sys.path)
 print('Attempted to Insert: ', newpath)
 
 import glob
-print(glob.glob(newpath))
+print(glob.glob(os.path.join(newpath, '**'), recursive= True))
 
 # -- General configuration ------------------------------------------------
 
