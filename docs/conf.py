@@ -19,8 +19,10 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.join(os.path.abspath('..'), 'netcrawl'))
-print(sys.path)
+newpath= os.path.join(os.path.abspath('..'), 'netcrawl')
+sys.path.insert(0, newpath)
+print('Current Path: ', sys.path)
+print('Attempted to Insert: ', newpath)
 
 # -- General configuration ------------------------------------------------
 
