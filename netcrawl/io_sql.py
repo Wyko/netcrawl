@@ -1054,23 +1054,34 @@ class device_db(sql_database):
         5. Add any new interfaces and serials
         6. Add any new MAC addresses
         7. Update any newly non-existent MAC addresses
+        
+        Args:
+            device (NetworkDevice): A network device object to check against 
+                for duplicates
+                
+        Returns:
+            bool: True if a duplicate was found and updated
         '''
         
         proc= 'main.process_duplicate_device'
         
+        # Check if the device exists in the database. If so, get the device_id
         index = self.exists(unique_name= device.unique_name)
-        
-        # Return if the device is not already in the database
         if not index:
             log('Not a duplicate record: [{}]'.format(
                 device.device_name), v=logging.I, proc= proc)
             return False
-        
+
+        # Proceed to process the duplicate device
         log('Positive Duplicate record: [{}]'.format(
                 device.device_name), v=logging.N, proc= proc)
         
         self.update_device_entry()
         return True
+    
+    
+    
+    
     
     
     @useCursor
