@@ -12,7 +12,7 @@ from contextlib import contextmanager
 def useCursor(func):
     '''Decorator that creates a cursor object to pass to the wrapped method in 
     case one wasn't passed originally. The wrapped function should accept 
-    :code:`cur` as an argument.'''
+    `cur` as an argument.'''
     @wraps(func)
     def needsCursor(self, *args, **kwargs):
         # Check if a cursor was passed
@@ -185,8 +185,8 @@ class sql_database():
             partial_value= None, 
             distinct= False,
             cur= None):
-        '''Counts the occurrences of the specified :code:`column` in 
-        a given :code:`table`. 
+        '''Counts the occurrences of the specified `column` in 
+        a given `table`. 
         
         Args:
             table (str): The table to search in
@@ -1047,7 +1047,7 @@ class device_db(sql_database):
         Parent method for handling an existing device which
         needs to be updated. 
         
-        1. Determine if the :code:`device` exists and, if so, get the device_id
+        1. Determine if the `device` exists and, if so, get the device_id
         2. Overwrite all entries in the device with the new device
         3. Set a new updated time for all dependent tables
         4. Delete any interfaces and serials which no longer exist
@@ -1085,26 +1085,49 @@ class device_db(sql_database):
     
     
     @useCursor
-    def update_device_entry(self, device, cur,
+    def update_device_entry(self, device, 
+                            cur= None,
                             device_id= None,
-                            unique_name= None,
+                            unique_name= None
                             ):
+        '''
+        Overwrites all entries in the Devices table with a matching `device_id` 
+        or `unique_name` with the information in `device`. 
+        
+        Args:
+            device (NetworkDevice): The device to source updates from
+            
+        Keyword Args:
+            cur (psycopg2.cursor): Cursor object used to update the database
+            device_id (int): If not None, overwrites the row at this index
+                with `device`
+            unique_name (str): If not None, overwrites any row with a matching 
+                `unique_name` field with `device`.
+                
+        .. note:: If both `device_id` and `unique_name` are given, the method 
+            will update **all** entries that match **either** key.
+            
+        Raises:
+            ValueError: No `unique_name` or `device_id` passed to the method
+        '''
         
         proc= 'device_db.update_device_entry'
         
         # Make sure we got a valid id or name
         if (unique_name is None and
             device_id is None):
-            log('No name or id passed to process',
+            log('No unique_name or device_id passed to to the method',
                 proc=proc, v= logging.A)
-            raise ValueError(proc+ ': No name or id passed to process')
+            raise ValueError(
+                proc+ ': No unique_name or device_id passed to to the method')
+        
         
         # Make the 'where' clause
-        where_clause= 'AND '.join([
+        where_clause= ' OR '.join([
             '{} = %({})s\n'.format(x, 'w'+x) for x in 
            ('device_id', 'unique_name') if x is not None])
         
-        # Update the existing device into the database
+        # Update the devices table with the device
         cur.execute('''
             UPDATE devices
             SET
