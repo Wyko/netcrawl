@@ -96,8 +96,7 @@ def recursive_scan(**kwargs):
             if m_db.count_pending() == 0 and tasks.empty():
                 _kill_workers(tasks, workers)
                 break
-            #################################################################
-            
+
             log('Main loop done.', proc=proc, v=logging.I)
             sleep(1)
         
