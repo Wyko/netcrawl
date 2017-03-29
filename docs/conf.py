@@ -177,3 +177,8 @@ extensions += ['sphinxarg.ext']
 extensions += ['sphinx.ext.viewcode']
 
 html_show_sphinx= False
+default_role= 'code'
+
+rst_prolog= '''
+    .. role:: o(py:obj)
+    '''

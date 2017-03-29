@@ -107,7 +107,6 @@ Authors
 
 
 .. toctree::
-    :maxdepth: 2
     :hidden:
         
     gettingstarted

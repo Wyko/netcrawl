@@ -15,12 +15,12 @@ def recursive_scan(**kwargs):
     Starts a **Recursive Scan** (-sR) run. This is the main scanning 
     method for netcrawl.
     
-    1. If a :code:`target` kwarg is given, add that seed device to
+    1. If a `target` kwarg is given, add that seed device to
     the list of pending deivces, even if it was already
     visited.
      
     2. Create workers (subprocesses) to perform the scanning 
-    work, up to 16 per CPU core, or up to the :code:`processes` 
+    work, up to 16 per CPU core, or up to the `processes` 
     kwarg per core if that kwarg was given.
     
     3. Query the Pending table in the Main database for 
@@ -46,13 +46,13 @@ def recursive_scan(**kwargs):
         target (str): The IP address of a seed device to add to the pending
             devices database
         
-        netmiko_platform (str): The Netmiko platform of the :code:`target`
+        netmiko_platform (str): The Netmiko platform of the `target`
             device, if one was given.
         
         processes (int): The number of worker processes to create,
             multiplied by the CPU count
             
-    .. note:: If there are any remaining keyword arguments in :code:`**kwargs`, 
+    .. note:: If there are any remaining keyword arguments in `**kwargs`, 
         they will be passed to :class:`netcrawl.io_sql.main_db` and 
         :class:`netcrawl.io_sql.device_db`
     '''
@@ -126,7 +126,7 @@ def _add_target_device(target, m_db, platform= 'unknown'):
 
 
 def _process_results(results, m_db, d_db):
-    '''Iterates over each item put on the :code:`results` queue and processes
+    '''Iterates over each item put on the `results` queue and processes
     them, adding them into the inventory database.'''
     
     proc= 'core._process_results'
@@ -481,7 +481,7 @@ def single_scan(target, netmiko_platform= 'unknown'):
     Keyword Args:
         target (str): The network address of the device to scan
         
-        netmiko_platform (str): The Netmiko platform of the :code:`target`
+        netmiko_platform (str): The Netmiko platform of the `target`
             device. If one is not given, it will attempt to autodetect the
             device type.
     '''

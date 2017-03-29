@@ -62,8 +62,8 @@ class cleanExit:
     
 
 def network_ip(ip, subnet):
-    '''Returns the network IP address calculated from the given :code:`ip` and
-    :code:`subnet`.
+    '''Returns the network IP address calculated from the given `ip` and
+    `subnet`.
     '''  
     
     
@@ -192,7 +192,7 @@ class benchmark(object):
 
 def port_is_open(port, address, timeout=5):
     """
-    Checks a socket to see if the specified :code:`port` is open.
+    Checks a socket to see if the specified `port` is open.
     
     Args:
         port (int): The numbered TCP port to check
