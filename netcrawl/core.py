@@ -92,8 +92,7 @@ def recursive_scan(**kwargs):
             # Process the results from the workers
             _process_results(results,  m_db, d_db)
                     
-            #################### POISION PILL ###############################
-            # Decide if we should kill the workers yet
+            # Poison Pill - Decide if we should kill the workers
             if m_db.count_pending() == 0 and tasks.empty():
                 _kill_workers(tasks, workers)
                 break
@@ -113,6 +112,8 @@ def recursive_scan(**kwargs):
             proc=proc, v=logging.H)
         return True
 
+
+
 def _add_target_device(target, m_db, platform= 'unknown'):
     '''Adds a seed device to the pending table and removes any references to it
     from the visited table so it will be processed again.'''
@@ -123,6 +124,7 @@ def _add_target_device(target, m_db, platform= 'unknown'):
     m_db.add_pending_device_d(
         ip_list=[target],
         netmiko_platform= platform)
+
 
 def _process_results(results, m_db, d_db):
     '''Iterates over each item put on the :code:`results` queue and processes
